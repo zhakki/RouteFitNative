@@ -18,19 +18,37 @@ class StepSensor(context: Context) : SensorEventListener {
 
     private var startSteps: Int? = null
     private var isCounting = false
+    private var isPaused = false
+    private var stepsAtPause = 0
+    private var totalPausedSteps = 0
 
     fun startCounting() {
         if (isCounting || stepCounterSensor == null) return
 
         startSteps = null
         isCounting = true
+        isPaused = false
+        stepsAtPause = 0
+        totalPausedSteps = 0
         sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    fun pauseCounting() {
+        if (!isCounting || isPaused) return
+        isPaused = true
+        stepsAtPause = _steps.value
+    }
+
+    fun resumeCounting() {
+        if (!isCounting || !isPaused) return
+        isPaused = false
     }
 
     fun stopCounting(): Int {
         val finalSteps = _steps.value
         sensorManager.unregisterListener(this)
         isCounting = false
+        isPaused = false
         startSteps = null
         _steps.value = 0
         return finalSteps
@@ -38,11 +56,19 @@ class StepSensor(context: Context) : SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_STEP_COUNTER) {
-            val totalSteps = event.values[0].toInt()
+            val currentSensorValue = event.values[0].toInt()
+            
             if (startSteps == null) {
-                startSteps = totalSteps
+                startSteps = currentSensorValue
             }
-            _steps.value = totalSteps - (startSteps ?: totalSteps)
+
+            if (!isPaused) {
+                _steps.value = currentSensorValue - (startSteps ?: currentSensorValue) - totalPausedSteps
+            } else {
+                val currentStepsTotal = currentSensorValue - (startSteps ?: currentSensorValue) - totalPausedSteps
+                totalPausedSteps += (currentStepsTotal - stepsAtPause)
+                stepsAtPause = currentStepsTotal
+            }
         }
     }
 
