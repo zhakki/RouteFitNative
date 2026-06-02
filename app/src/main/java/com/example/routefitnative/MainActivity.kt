@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import com.example.routefitnative.ui.screens.MapScreen
+import com.example.routefitnative.ui.screens.map.MapScreen
 import com.example.routefitnative.ui.theme.RouteFitNativeTheme
 
 class MainActivity : ComponentActivity() {
@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    // Temporarily setting our functional MapScreen as the home screen
+                    // Setting the stylized and integrated MapScreen as the home screen
                     MapScreen()
                 }
             }

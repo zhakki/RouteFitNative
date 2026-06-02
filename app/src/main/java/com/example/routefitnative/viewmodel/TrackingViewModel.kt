@@ -35,6 +35,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     private val _totalDistance = MutableStateFlow(0.0)
     val totalDistance: StateFlow<Double> = _totalDistance.asStateFlow()
 
+    private val _duration = MutableStateFlow(java.time.Duration.ZERO)
+    val duration: StateFlow<java.time.Duration> = _duration.asStateFlow()
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as TrackingService.TrackingBinder
@@ -56,6 +59,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             }
             viewModelScope.launch {
                 trackingService?.totalDistance?.collect { _totalDistance.value = it }
+            }
+            viewModelScope.launch {
+                trackingService?.duration?.collect { _duration.value = it }
             }
         }
 

@@ -22,10 +22,15 @@ import com.google.android.gms.maps.model.LatLng
 import com.example.routefitnative.utils.MapUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Timer
+import java.util.TimerTask
 
 class TrackingService : Service() {
 
@@ -49,6 +54,11 @@ class TrackingService : Service() {
 
     private val _totalDistance = MutableStateFlow(0.0)
     val totalDistance: StateFlow<Double> = _totalDistance
+
+    private val _duration = MutableStateFlow(java.time.Duration.ZERO)
+    val duration: StateFlow<java.time.Duration> = _duration
+
+    private var timerJob: Job? = null
 
     companion object {
         const val CHANNEL_ID = "tracking_channel"
@@ -106,8 +116,19 @@ class TrackingService : Service() {
         _routePoints.value = emptyList()
         _totalDistance.value = 0.0
         _steps.value = 0
+        _duration.value = java.time.Duration.ZERO
         _isTracking.value = true
         _isPaused.value = false
+
+        timerJob?.cancel()
+        timerJob = serviceScope.launch {
+            while (isActive) {
+                delay(1000)
+                if (!_isPaused.value) {
+                    _duration.value = _duration.value.plusSeconds(1)
+                }
+            }
+        }
 
         serviceScope.launch {
             stepSensor.steps.collect {
@@ -137,6 +158,8 @@ class TrackingService : Service() {
     fun stopTracking() {
         _isTracking.value = false
         _isPaused.value = false
+        timerJob?.cancel()
+        timerJob = null
         stepSensor.stopCounting()
         fusedLocationClient.removeLocationUpdates(locationCallback)
         stopForeground(STOP_FOREGROUND_REMOVE)
