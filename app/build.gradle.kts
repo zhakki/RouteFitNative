@@ -55,6 +55,11 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
 
+    // Maps & Location
+    implementation(libs.google.maps)
+    implementation(libs.play.services.location)
+    implementation(libs.maps.compose)
+
     testImplementation(libs.junit)
 
     androidTestImplementation(libs.androidx.junit)
