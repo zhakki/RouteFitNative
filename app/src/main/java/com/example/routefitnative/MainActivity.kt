@@ -3,7 +3,7 @@ package com.example.routefitnative
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.example.routefitnative.ui.screens.login.LoginScreen
+import com.example.routefitnative.ui.navigation.RouteFitNavigation
 import com.example.routefitnative.ui.theme.RouteFitNativeTheme
 
 class MainActivity : ComponentActivity() {
@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RouteFitNativeTheme {
-                LoginScreen()
+                RouteFitNavigation()
             }
         }
     }

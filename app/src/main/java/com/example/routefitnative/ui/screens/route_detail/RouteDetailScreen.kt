@@ -48,7 +48,11 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun RouteDetailScreen(modifier: Modifier = Modifier) {
+fun RouteDetailScreen(
+    modifier: Modifier = Modifier,
+    onBackClick: () -> Unit = {},
+    onBackToHistoryClick: () -> Unit = {}
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -76,7 +80,7 @@ fun RouteDetailScreen(modifier: Modifier = Modifier) {
                 .padding(top = 30.dp, bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            RouteDetailTopBar()
+            RouteDetailTopBar(onBackClick = onBackClick)
 
             Text(
                 text = "MARSRUUDI DETAILID",
@@ -158,7 +162,7 @@ fun RouteDetailScreen(modifier: Modifier = Modifier) {
             }
 
             OutlinedButton(
-                onClick = {},
+                onClick = onBackToHistoryClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 14.dp)
@@ -181,13 +185,14 @@ fun RouteDetailScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun RouteDetailTopBar() {
+private fun RouteDetailTopBar(onBackClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
     ) {
         Surface(
+            onClick = onBackClick,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .size(46.dp),

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,12 +48,19 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun MapScreen(modifier: Modifier = Modifier) {
+fun MapScreen(
+    modifier: Modifier = Modifier,
+    onBottomNavItemClick: (BottomNavItem) -> Unit = {},
+    onStopClick: () -> Unit = {}
+) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
         bottomBar = {
-            BottomNavigationBar(selectedItem = BottomNavItem.Map)
+            BottomNavigationBar(
+                selectedItem = BottomNavItem.Map,
+                onItemClick = onBottomNavItemClick
+            )
         }
     ) { innerPadding ->
         Column(
@@ -102,6 +110,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
             }
 
             MapPreview(
+                onStopClick = onStopClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -167,7 +176,10 @@ private fun MapStatCard(
 }
 
 @Composable
-private fun MapPreview(modifier: Modifier = Modifier) {
+private fun MapPreview(
+    modifier: Modifier = Modifier,
+    onStopClick: () -> Unit
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -201,6 +213,7 @@ private fun MapPreview(modifier: Modifier = Modifier) {
         }
 
         ControlPanel(
+            onStopClick = onStopClick,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 22.dp, vertical = 24.dp)
@@ -209,7 +222,10 @@ private fun MapPreview(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ControlPanel(modifier: Modifier = Modifier) {
+private fun ControlPanel(
+    modifier: Modifier = Modifier,
+    onStopClick: () -> Unit
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = RouteFitSurface.copy(alpha = 0.94f),
@@ -269,7 +285,8 @@ private fun ControlPanel(modifier: Modifier = Modifier) {
                 label = "STOP",
                 containerColor = Color(0xFFB98282),
                 borderColor = Color.Transparent,
-                contentColor = Color(0xFF4B1515)
+                contentColor = Color(0xFF4B1515),
+                onClick = onStopClick
             ) {
                 StopIcon(
                     modifier = Modifier.size(24.dp),
@@ -287,6 +304,7 @@ private fun CircleActionButton(
     borderColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
     icon: @Composable () -> Unit
 ) {
     Column(
@@ -294,7 +312,9 @@ private fun CircleActionButton(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Surface(
-            modifier = Modifier.size(76.dp),
+            modifier = Modifier
+                .size(76.dp)
+                .clickable(onClick = onClick),
             shape = CircleShape,
             color = containerColor,
             border = BorderStroke(4.dp, borderColor)

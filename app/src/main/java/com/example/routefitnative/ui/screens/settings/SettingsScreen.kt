@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,7 +53,10 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    modifier: Modifier = Modifier,
+    onBackClick: () -> Unit = {}
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -79,7 +83,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 .padding(horizontal = 22.dp)
                 .padding(top = 30.dp, bottom = 32.dp)
         ) {
-            SettingsTopBar()
+            SettingsTopBar(onBackClick = onBackClick)
 
             SettingsSectionTitle(
                 text = "EESMÄRGID",
@@ -137,7 +141,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SettingsTopBar() {
+private fun SettingsTopBar(onBackClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -146,7 +150,8 @@ private fun SettingsTopBar() {
         Surface(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(46.dp),
+                .size(46.dp)
+                .clickable(onClick = onBackClick),
             shape = CircleShape,
             color = RouteFitSurfaceVariant.copy(alpha = 0.82f),
             border = BorderStroke(1.dp, RouteFitOutline)

@@ -45,7 +45,11 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun RegisterScreen(modifier: Modifier = Modifier) {
+fun RegisterScreen(
+    modifier: Modifier = Modifier,
+    onRegisterClick: () -> Unit = {},
+    onBackToLoginClick: () -> Unit = {}
+) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -100,6 +104,8 @@ fun RegisterScreen(modifier: Modifier = Modifier) {
                 onPasswordVisibilityChange = { passwordVisible = !passwordVisible },
                 repeatPasswordVisible = repeatPasswordVisible,
                 onRepeatPasswordVisibilityChange = { repeatPasswordVisible = !repeatPasswordVisible },
+                onRegisterClick = onRegisterClick,
+                onBackToLoginClick = onBackToLoginClick,
                 modifier = Modifier.padding(top = 54.dp)
             )
         }
@@ -120,6 +126,8 @@ private fun RegisterCard(
     onPasswordVisibilityChange: () -> Unit,
     repeatPasswordVisible: Boolean,
     onRepeatPasswordVisibilityChange: () -> Unit,
+    onRegisterClick: () -> Unit,
+    onBackToLoginClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -196,7 +204,7 @@ private fun RegisterCard(
             )
 
             Button(
-                onClick = {},
+                onClick = onRegisterClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 34.dp)
@@ -227,7 +235,7 @@ private fun RegisterCard(
                     color = RouteFitTextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
-                TextButton(onClick = {}) {
+                TextButton(onClick = onBackToLoginClick) {
                     Text(
                         text = "Logi sisse",
                         color = RouteFitAccent,

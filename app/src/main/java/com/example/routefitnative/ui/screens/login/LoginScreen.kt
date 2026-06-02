@@ -46,7 +46,11 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun LoginScreen(modifier: Modifier = Modifier) {
+fun LoginScreen(
+    modifier: Modifier = Modifier,
+    onLoginClick: () -> Unit = {},
+    onRegisterClick: () -> Unit = {}
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -100,6 +104,8 @@ fun LoginScreen(modifier: Modifier = Modifier) {
                 onPasswordChange = { password = it },
                 passwordVisible = passwordVisible,
                 onPasswordVisibilityChange = { passwordVisible = !passwordVisible },
+                onLoginClick = onLoginClick,
+                onRegisterClick = onRegisterClick,
                 modifier = Modifier.padding(top = 54.dp)
             )
         }
@@ -114,6 +120,8 @@ private fun LoginCard(
     onPasswordChange: (String) -> Unit,
     passwordVisible: Boolean,
     onPasswordVisibilityChange: () -> Unit,
+    onLoginClick: () -> Unit,
+    onRegisterClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -183,6 +191,7 @@ private fun LoginCard(
 
             RouteFitPrimaryButton(
                 text = "Logi sisse",
+                onClick = onLoginClick,
                 modifier = Modifier.padding(top = 22.dp)
             )
 
@@ -198,7 +207,7 @@ private fun LoginCard(
                     color = RouteFitTextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
-                TextButton(onClick = {}) {
+                TextButton(onClick = onRegisterClick) {
                     Text(
                         text = "Loo konto",
                         color = RouteFitAccent,

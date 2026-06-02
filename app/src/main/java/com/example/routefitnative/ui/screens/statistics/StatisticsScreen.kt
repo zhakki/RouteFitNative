@@ -49,12 +49,18 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun StatisticsScreen(modifier: Modifier = Modifier) {
+fun StatisticsScreen(
+    modifier: Modifier = Modifier,
+    onBottomNavItemClick: (BottomNavItem) -> Unit = {}
+) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
         bottomBar = {
-            BottomNavigationBar(selectedItem = BottomNavItem.Statistics)
+            BottomNavigationBar(
+                selectedItem = BottomNavItem.Statistics,
+                onItemClick = onBottomNavItemClick
+            )
         }
     ) { innerPadding ->
         Box(

@@ -49,7 +49,11 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun ResultScreen(modifier: Modifier = Modifier) {
+fun ResultScreen(
+    modifier: Modifier = Modifier,
+    onBackClick: () -> Unit = {},
+    onBackHomeClick: () -> Unit = {}
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -77,7 +81,7 @@ fun ResultScreen(modifier: Modifier = Modifier) {
                 .padding(top = 30.dp, bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ResultTopBar()
+            ResultTopBar(onBackClick = onBackClick)
 
             Text(
                 text = "MARSRUUT LÕPETATUD",
@@ -127,7 +131,7 @@ fun ResultScreen(modifier: Modifier = Modifier) {
             )
 
             Button(
-                onClick = {},
+                onClick = onBackHomeClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
@@ -150,13 +154,14 @@ fun ResultScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ResultTopBar() {
+private fun ResultTopBar(onBackClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
     ) {
         Surface(
+            onClick = onBackClick,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .size(46.dp),

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,12 +50,19 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun HistoryScreen(modifier: Modifier = Modifier) {
+fun HistoryScreen(
+    modifier: Modifier = Modifier,
+    onBottomNavItemClick: (BottomNavItem) -> Unit = {},
+    onRouteClick: () -> Unit = {}
+) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
         bottomBar = {
-            BottomNavigationBar(selectedItem = BottomNavItem.History)
+            BottomNavigationBar(
+                selectedItem = BottomNavItem.History,
+                onItemClick = onBottomNavItemClick
+            )
         }
     ) { innerPadding ->
         Box(
@@ -127,6 +135,7 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                     duration = "38 min",
                     steps = "3 689",
                     calories = "195 kcal",
+                    onClick = onRouteClick,
                     modifier = Modifier.padding(top = 18.dp)
                 )
 
@@ -137,6 +146,7 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                     duration = "27 min",
                     steps = "2 940",
                     calories = "132 kcal",
+                    onClick = onRouteClick,
                     modifier = Modifier.padding(top = 18.dp)
                 )
             }
@@ -221,10 +231,13 @@ private fun RouteHistoryCard(
     duration: String,
     steps: String,
     calories: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         color = RouteFitSurface.copy(alpha = 0.94f),
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, RouteFitOutline)
