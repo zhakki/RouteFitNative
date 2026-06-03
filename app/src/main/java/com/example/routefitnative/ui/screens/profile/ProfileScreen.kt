@@ -55,7 +55,8 @@ import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 fun ProfileScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    onEditProfileClick: () -> Unit = {}
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -128,7 +129,8 @@ fun ProfileScreen(
                 }
 
                 ProfileHeader(
-                    modifier = Modifier.padding(top = 34.dp)
+                    modifier = Modifier.padding(top = 34.dp),
+                    onEditProfileClick = onEditProfileClick
                 )
 
                 SectionTitle(
@@ -150,7 +152,10 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileHeader(modifier: Modifier = Modifier) {
+private fun ProfileHeader(
+    modifier: Modifier = Modifier,
+    onEditProfileClick: () -> Unit = {}
+) {
     RouteFitProfileCard(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -221,7 +226,7 @@ private fun ProfileHeader(modifier: Modifier = Modifier) {
         )
 
         Button(
-            onClick = {},
+            onClick = onEditProfileClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 22.dp)

@@ -55,7 +55,8 @@ import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    onEditProfileClick: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -114,7 +115,8 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 26.dp)
             )
             AccountCard(
-                modifier = Modifier.padding(top = 14.dp)
+                modifier = Modifier.padding(top = 14.dp),
+                onEditProfileClick = onEditProfileClick
             )
 
             Button(
@@ -275,11 +277,15 @@ private fun AppSettingsCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AccountCard(modifier: Modifier = Modifier) {
+private fun AccountCard(
+    modifier: Modifier = Modifier,
+    onEditProfileClick: () -> Unit = {}
+) {
     RouteFitSettingsCard(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onEditProfileClick)
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

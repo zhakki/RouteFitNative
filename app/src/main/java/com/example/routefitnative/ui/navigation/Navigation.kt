@@ -10,6 +10,7 @@ import com.example.routefitnative.ui.screens.history.HistoryScreen
 import com.example.routefitnative.ui.screens.home.HomeScreen
 import com.example.routefitnative.ui.screens.login.LoginScreen
 import com.example.routefitnative.ui.screens.map.MapScreen
+import com.example.routefitnative.ui.screens.profile.EditProfileScreen
 import com.example.routefitnative.ui.screens.profile.ProfileScreen
 import com.example.routefitnative.ui.screens.register.RegisterScreen
 import com.example.routefitnative.ui.screens.result.ResultScreen
@@ -25,6 +26,7 @@ object RouteFitRoutes {
     const val HISTORY = "history"
     const val STATISTICS = "statistics"
     const val PROFILE = "profile"
+    const val EDIT_PROFILE = "edit_profile"
     const val SETTINGS = "settings"
     const val RESULT = "result"
     const val ROUTE_DETAIL = "route_detail"
@@ -112,6 +114,9 @@ fun RouteFitNavigation() {
                 },
                 onSettingsClick = {
                     navController.navigate(RouteFitRoutes.SETTINGS)
+                },
+                onEditProfileClick = {
+                    navController.navigate(RouteFitRoutes.EDIT_PROFILE)
                 }
             )
         }
@@ -124,7 +129,26 @@ fun RouteFitNavigation() {
                         }
                         launchSingleTop = true
                     }
+                },
+                onEditProfileClick = {
+                    navController.navigate(RouteFitRoutes.EDIT_PROFILE)
                 }
+            )
+        }
+        composable(RouteFitRoutes.EDIT_PROFILE) {
+            val navigateProfile = {
+                navController.navigate(RouteFitRoutes.PROFILE) {
+                    popUpTo(RouteFitRoutes.PROFILE) {
+                        inclusive = true
+                    }
+                    launchSingleTop = true
+                }
+            }
+
+            EditProfileScreen(
+                onBackClick = navigateProfile,
+                onSaveClick = navigateProfile,
+                onCancelClick = navigateProfile
             )
         }
         composable(RouteFitRoutes.RESULT) {
