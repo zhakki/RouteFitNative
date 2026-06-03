@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +30,8 @@ import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
 import com.example.routefitnative.ui.theme.*
 import com.example.routefitnative.viewmodel.TrackingViewModel
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -36,6 +39,7 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.time.Duration
 
 @Composable
@@ -51,7 +55,11 @@ fun MapScreen(
     val duration by trackingViewModel.duration.collectAsState()
     val totalDistance by trackingViewModel.totalDistance.collectAsState()
     
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    
+    var isMapLoading by remember { mutableStateOf(true) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -109,36 +117,46 @@ fun MapScreen(
                 )
             }
 
-            MapPreview(
-                routePoints = routePoints,
-                isTracking = isTracking,
-                isPaused = isPaused,
-                onStartClick = { trackingViewModel.startTracking() },
-                onPauseClick = { 
-                    if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
-                },
-                onStopRequested = { map ->
-                    scope.launch {
-                        // 1. Zoom out to fit route
-                        if (routePoints.size >= 2) {
-                            val builder = LatLngBounds.builder()
-                            routePoints.forEach { builder.include(it) }
-                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
-                            delay(600) // Wait for animation
+            Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
+                MapPreview(
+                    routePoints = routePoints,
+                    isTracking = isTracking,
+                    isPaused = isPaused,
+                    onStartClick = { trackingViewModel.startTracking() },
+                    onPauseClick = { 
+                        if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
+                    },
+                    onStopRequested = { map ->
+                        scope.launch {
+                            // 1. Zoom out to fit route
+                            if (routePoints.size >= 2) {
+                                val builder = LatLngBounds.builder()
+                                routePoints.forEach { builder.include(it) }
+                                map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
+                                delay(600) // Wait for animation
+                            }
+                            
+                            // 2. Save route (which also stops tracking)
+                            trackingViewModel.saveCurrentRoute()
+                            
+                            // 3. Navigate
+                            onStopClick()
                         }
-                        
-                        // 2. Save route (which also stops tracking)
-                        trackingViewModel.saveCurrentRoute()
-                        
-                        // 3. Navigate
-                        onStopClick()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    fusedLocationClient = fusedLocationClient,
+                    onLocationLoaded = { isMapLoading = false }
+                )
+                
+                if (isMapLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(RouteFitBackground),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = RouteFitAccent)
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(top = 18.dp)
-            )
+                }
+            }
         }
     }
 }
@@ -206,14 +224,36 @@ private fun MapPreview(
     onStartClick: () -> Unit,
     onPauseClick: () -> Unit,
     onStopRequested: (com.google.android.gms.maps.GoogleMap) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
+    onLocationLoaded: () -> Unit
 ) {
-    val initialPos = LatLng(59.437, 24.753)
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialPos, 15f)
+        position = CameraPosition.fromLatLngZoom(LatLng(59.437, 24.753), 15f)
     }
-    
+
     var googleMap by remember { mutableStateOf<com.google.android.gms.maps.GoogleMap?>(null) }
+
+    // Set initial location using getCurrentLocation for accuracy
+    LaunchedEffect(Unit) {
+        try {
+            val location = fusedLocationClient.getCurrentLocation(
+                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+                null
+            ).await()
+            
+            if (location != null) {
+                cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                    LatLng(location.latitude, location.longitude), 
+                    15f
+                )
+            }
+        } catch (e: SecurityException) {
+            // No permission
+        } finally {
+            onLocationLoaded()
+        }
+    }
 
     // Auto-follow logic
     LaunchedEffect(routePoints) {
