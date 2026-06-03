@@ -8,14 +8,22 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.routefitnative.data.RouteRepository
+import com.example.routefitnative.data.UserRepository
+import com.example.routefitnative.model.RouteModel
 import com.example.routefitnative.services.TrackingService
 import com.google.android.gms.maps.model.LatLng
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class TrackingViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val userRepository = UserRepository()
+    private val routeRepository = RouteRepository()
+    private val auth = FirebaseAuth.getInstance()
 
     private var trackingService: TrackingService? = null
     private var isBound = false
@@ -98,6 +106,39 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     fun stopTracking() {
         trackingService?.stopTracking()
+    }
+
+    suspend fun saveCurrentRoute() {
+        val userId = auth.currentUser?.uid ?: return
+
+        val points = _routePoints.value
+        val distanceMeters = _totalDistance.value
+        val duration = _duration.value
+        val finalSteps = _steps.value
+
+        if (points.isEmpty()) return
+
+        val profile = userRepository.getUserProfile(userId)
+        val weight = profile?.weightKg ?: 70.0
+        val calories = (weight * (distanceMeters / 1000.0) * 0.9).toInt()
+
+        val routeModel = RouteModel(
+            userId = userId,
+            title = "Uus marsruut",
+            startTime = System.currentTimeMillis() - duration.toMillis(),
+            endTime = System.currentTimeMillis(),
+            distanceKm = distanceMeters / 1000.0,
+            durationSeconds = duration.seconds.toInt(),
+            steps = finalSteps,
+            calories = calories,
+            averageSpeed = if (duration.seconds > 0) (distanceMeters / 1000.0) / (duration.seconds / 3600.0) else 0.0,
+            activityType = "walking"
+        )
+
+        routeRepository.saveRoute(userId, routeModel)
+
+        // After saving, we can finally stop everything
+        stopTracking()
     }
 
     override fun onCleared() {

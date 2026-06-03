@@ -1,28 +1,16 @@
 package com.example.routefitnative.ui.screens.map
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,23 +24,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
-import com.example.routefitnative.ui.theme.RouteFitAccent
-import com.example.routefitnative.ui.theme.RouteFitBackground
-import com.example.routefitnative.ui.theme.RouteFitOnAccent
-import com.example.routefitnative.ui.theme.RouteFitOutline
-import com.example.routefitnative.ui.theme.RouteFitSurface
-import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
-import com.example.routefitnative.ui.theme.RouteFitTextPrimary
-import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.example.routefitnative.ui.theme.*
+import com.example.routefitnative.viewmodel.TrackingViewModel
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.Duration
 
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
-    onStopClick: () -> Unit = {}
+    onStopClick: () -> Unit = {},
+    trackingViewModel: TrackingViewModel = viewModel()
 ) {
+    val routePoints by trackingViewModel.routePoints.collectAsState()
+    val isTracking by trackingViewModel.isTracking.collectAsState()
+    val isPaused by trackingViewModel.isPaused.collectAsState()
+    val duration by trackingViewModel.duration.collectAsState()
+    val totalDistance by trackingViewModel.totalDistance.collectAsState()
+    
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
@@ -91,26 +91,49 @@ fun MapScreen(
             ) {
                 MapStatCard(
                     label = "Tempo",
-                    value = "0'00",
+                    value = formatPace(totalDistance, duration),
                     unit = "/km",
                     modifier = Modifier.weight(1f)
                 )
                 MapStatCard(
                     label = "Vahemaa",
-                    value = "0",
-                    unit = "m",
+                    value = if (totalDistance < 1000) "%.0f".format(totalDistance) else "%.2f".format(totalDistance / 1000),
+                    unit = if (totalDistance < 1000) "m" else "km",
                     modifier = Modifier.weight(1f)
                 )
                 MapStatCard(
                     label = "Aeg",
-                    value = "00:00",
+                    value = formatDuration(duration),
                     unit = "",
                     modifier = Modifier.weight(1f)
                 )
             }
 
             MapPreview(
-                onStopClick = onStopClick,
+                routePoints = routePoints,
+                isTracking = isTracking,
+                isPaused = isPaused,
+                onStartClick = { trackingViewModel.startTracking() },
+                onPauseClick = { 
+                    if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
+                },
+                onStopRequested = { map ->
+                    scope.launch {
+                        // 1. Zoom out to fit route
+                        if (routePoints.size >= 2) {
+                            val builder = LatLngBounds.builder()
+                            routePoints.forEach { builder.include(it) }
+                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
+                            delay(600) // Wait for animation
+                        }
+                        
+                        // 2. Save route (which also stops tracking)
+                        trackingViewModel.saveCurrentRoute()
+                        
+                        // 3. Navigate
+                        onStopClick()
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -154,7 +177,7 @@ private fun MapStatCard(
                     text = value,
                     color = RouteFitAccent,
                     style = MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = if (value.length > 3) 34.sp else 40.sp,
+                        fontSize = if (value.length > 3) 30.sp else 36.sp,
                         lineHeight = 42.sp
                     ),
                     fontWeight = FontWeight.ExtraBold,
@@ -177,32 +200,90 @@ private fun MapStatCard(
 
 @Composable
 private fun MapPreview(
-    modifier: Modifier = Modifier,
-    onStopClick: () -> Unit
+    routePoints: List<LatLng>,
+    isTracking: Boolean,
+    isPaused: Boolean,
+    onStartClick: () -> Unit,
+    onPauseClick: () -> Unit,
+    onStopRequested: (com.google.android.gms.maps.GoogleMap) -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val initialPos = LatLng(59.437, 24.753)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(initialPos, 15f)
+    }
+    
+    var googleMap by remember { mutableStateOf<com.google.android.gms.maps.GoogleMap?>(null) }
+
+    // Auto-follow logic
+    LaunchedEffect(routePoints) {
+        if (routePoints.isNotEmpty() && !isPaused) {
+            cameraPositionState.animate(
+                update = CameraUpdateFactory.newLatLng(routePoints.last())
+            )
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(RouteFitBackground)
     ) {
-        StylizedMapBackground(modifier = Modifier.matchParentSize())
+        GoogleMap(
+            modifier = Modifier.matchParentSize(),
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(isMyLocationEnabled = true),
+            uiSettings = MapUiSettings(
+                myLocationButtonEnabled = false,
+                zoomControlsEnabled = false,
+                mapToolbarEnabled = false
+            ),
+            onMapLoaded = {
+                // Controller available
+            }
+        ) {
+            MapEffect(Unit) { map ->
+                googleMap = map
+            }
+            
+            if (routePoints.isNotEmpty()) {
+                Polyline(
+                    points = routePoints,
+                    color = RouteFitAccent,
+                    width = 12f,
+                    jointType = com.google.android.gms.maps.model.JointType.ROUND
+                )
+            }
+        }
 
-        Text(
-            text = "KAARDI EELVAADE",
-            modifier = Modifier.align(Alignment.Center),
-            color = RouteFitTextPrimary.copy(alpha = 0.58f),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.ExtraBold
+        // Overlay to maintain the stylized look of the original UI
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            RouteFitBackground.copy(alpha = 0.3f),
+                            Color.Transparent,
+                            RouteFitBackground.copy(alpha = 0.5f)
+                        )
+                    )
+                )
         )
 
         Surface(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 92.dp, end = 24.dp)
+                .padding(top = 24.dp, end = 24.dp)
                 .size(68.dp),
             shape = CircleShape,
-            color = RouteFitAccent.copy(alpha = 0.16f),
-            border = BorderStroke(2.dp, RouteFitAccent.copy(alpha = 0.76f))
+            color = RouteFitSurface.copy(alpha = 0.8f),
+            border = BorderStroke(2.dp, RouteFitAccent.copy(alpha = 0.76f)),
+            onClick = {
+                if (routePoints.isNotEmpty()) {
+                    // Manual re-center logic
+                }
+            }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 MyLocationIcon(
@@ -213,7 +294,13 @@ private fun MapPreview(
         }
 
         ControlPanel(
-            onStopClick = onStopClick,
+            isTracking = isTracking,
+            isPaused = isPaused,
+            onStartClick = onStartClick,
+            onPauseClick = onPauseClick,
+            onStopClick = {
+                googleMap?.let { onStopRequested(it) }
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 22.dp, vertical = 24.dp)
@@ -223,8 +310,12 @@ private fun MapPreview(
 
 @Composable
 private fun ControlPanel(
-    modifier: Modifier = Modifier,
-    onStopClick: () -> Unit
+    isTracking: Boolean,
+    isPaused: Boolean,
+    onStartClick: () -> Unit,
+    onPauseClick: () -> Unit,
+    onStopClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -268,30 +359,48 @@ private fun ControlPanel(
                 }
             }
 
-            CircleActionButton(
-                label = "START",
-                containerColor = RouteFitSurfaceVariant,
-                borderColor = RouteFitAccent,
-                contentColor = RouteFitAccent,
-                modifier = Modifier.padding(horizontal = 18.dp)
-            ) {
-                PlayIcon(
-                    modifier = Modifier.size(28.dp),
-                    color = RouteFitAccent
-                )
-            }
+            if (!isTracking) {
+                CircleActionButton(
+                    label = "START",
+                    containerColor = RouteFitSurfaceVariant,
+                    borderColor = RouteFitAccent,
+                    contentColor = RouteFitAccent,
+                    onClick = onStartClick,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                ) {
+                    PlayIcon(
+                        modifier = Modifier.size(28.dp),
+                        color = RouteFitAccent
+                    )
+                }
+            } else {
+                CircleActionButton(
+                    label = if (isPaused) "RESUME" else "PAUSE",
+                    containerColor = RouteFitSurfaceVariant,
+                    borderColor = if (isPaused) RouteFitAccent else RouteFitTextSecondary,
+                    contentColor = if (isPaused) RouteFitAccent else RouteFitTextPrimary,
+                    onClick = onPauseClick,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                ) {
+                    if (isPaused) {
+                        PlayIcon(modifier = Modifier.size(28.dp), color = RouteFitAccent)
+                    } else {
+                        PauseIcon(modifier = Modifier.size(28.dp), color = RouteFitTextPrimary)
+                    }
+                }
 
-            CircleActionButton(
-                label = "STOP",
-                containerColor = Color(0xFFB98282),
-                borderColor = Color.Transparent,
-                contentColor = Color(0xFF4B1515),
-                onClick = onStopClick
-            ) {
-                StopIcon(
-                    modifier = Modifier.size(24.dp),
-                    color = Color(0xFF4B1515)
-                )
+                CircleActionButton(
+                    label = "STOP",
+                    containerColor = Color(0xFFB98282),
+                    borderColor = Color.Transparent,
+                    contentColor = Color(0xFF4B1515),
+                    onClick = onStopClick
+                ) {
+                    StopIcon(
+                        modifier = Modifier.size(24.dp),
+                        color = Color(0xFF4B1515)
+                    )
+                }
             }
         }
     }
@@ -334,68 +443,6 @@ private fun CircleActionButton(
 }
 
 @Composable
-private fun StylizedMapBackground(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.background(RouteFitSurfaceVariant)) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        RouteFitSurfaceVariant,
-                        RouteFitSurfaceVariant.copy(alpha = 0.72f),
-                        RouteFitBackground.copy(alpha = 0.94f)
-                    )
-                )
-            )
-
-            val roadColor = RouteFitTextSecondary.copy(alpha = 0.18f)
-            val fineLine = RouteFitTextSecondary.copy(alpha = 0.08f)
-
-            repeat(8) { index ->
-                val y = size.height * (index + 1) / 9f
-                drawLine(
-                    color = fineLine,
-                    start = androidx.compose.ui.geometry.Offset(0f, y),
-                    end = androidx.compose.ui.geometry.Offset(size.width, y + (index % 2) * 34f),
-                    strokeWidth = 1.dp.toPx()
-                )
-            }
-
-            repeat(6) { index ->
-                val x = size.width * (index + 1) / 7f
-                drawLine(
-                    color = fineLine,
-                    start = androidx.compose.ui.geometry.Offset(x, 0f),
-                    end = androidx.compose.ui.geometry.Offset(x - 42f, size.height),
-                    strokeWidth = 1.dp.toPx()
-                )
-            }
-
-            drawLine(
-                color = roadColor,
-                start = androidx.compose.ui.geometry.Offset(size.width * 0.08f, 0f),
-                end = androidx.compose.ui.geometry.Offset(size.width * 0.58f, size.height),
-                strokeWidth = 16.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = roadColor,
-                start = androidx.compose.ui.geometry.Offset(0f, size.height * 0.42f),
-                end = androidx.compose.ui.geometry.Offset(size.width, size.height * 0.26f),
-                strokeWidth = 12.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = roadColor,
-                start = androidx.compose.ui.geometry.Offset(size.width * 0.42f, 0f),
-                end = androidx.compose.ui.geometry.Offset(size.width * 0.78f, size.height),
-                strokeWidth = 9.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
-
-@Composable
 private fun MyLocationIcon(modifier: Modifier = Modifier, color: Color) {
     Canvas(modifier = modifier) {
         val stroke = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
@@ -422,10 +469,48 @@ private fun PlayIcon(modifier: Modifier = Modifier, color: Color) {
 }
 
 @Composable
+private fun PauseIcon(modifier: Modifier = Modifier, color: Color) {
+    Canvas(modifier = modifier) {
+        val width = 6.dp.toPx()
+        val spacing = 8.dp.toPx()
+        drawRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(center.x - spacing / 2 - width, size.height * 0.2f),
+            size = androidx.compose.ui.geometry.Size(width, size.height * 0.6f)
+        )
+        drawRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(center.x + spacing / 2, size.height * 0.2f),
+            size = androidx.compose.ui.geometry.Size(width, size.height * 0.6f)
+        )
+    }
+}
+
+@Composable
 private fun StopIcon(modifier: Modifier = Modifier, color: Color) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(2.dp))
             .background(color)
     )
+}
+
+private fun formatDuration(duration: Duration): String {
+    val seconds = duration.seconds % 60
+    val minutes = (duration.seconds / 60) % 60
+    val hours = duration.seconds / 3600
+    return if (hours > 0) {
+        "%02d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(minutes, seconds)
+    }
+}
+
+private fun formatPace(distanceMeters: Double, duration: Duration): String {
+    if (distanceMeters <= 0 || duration.seconds <= 0) return "0'00"
+    val distanceKm = distanceMeters / 1000.0
+    val totalSecondsPerKm = (duration.seconds / distanceKm).toInt()
+    val minutes = totalSecondsPerKm / 60
+    val seconds = totalSecondsPerKm % 60
+    return "%d'%02d".format(minutes, seconds)
 }
