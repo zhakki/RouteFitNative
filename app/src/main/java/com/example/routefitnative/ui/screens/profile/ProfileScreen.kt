@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,12 +52,20 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun ProfileScreen(modifier: Modifier = Modifier) {
+fun ProfileScreen(
+    modifier: Modifier = Modifier,
+    onBottomNavItemClick: (BottomNavItem) -> Unit = {},
+    onSettingsClick: () -> Unit = {},
+    onEditProfileClick: () -> Unit = {}
+) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
         bottomBar = {
-            BottomNavigationBar(selectedItem = BottomNavItem.Profile)
+            BottomNavigationBar(
+                selectedItem = BottomNavItem.Profile,
+                onItemClick = onBottomNavItemClick
+            )
         }
     ) { innerPadding ->
         Box(
@@ -104,7 +113,8 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .size(48.dp),
+                            .size(48.dp)
+                            .clickable(onClick = onSettingsClick),
                         shape = CircleShape,
                         color = RouteFitSurfaceVariant.copy(alpha = 0.82f),
                         border = BorderStroke(1.dp, RouteFitOutline)
@@ -119,7 +129,8 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                 }
 
                 ProfileHeader(
-                    modifier = Modifier.padding(top = 34.dp)
+                    modifier = Modifier.padding(top = 34.dp),
+                    onEditProfileClick = onEditProfileClick
                 )
 
                 SectionTitle(
@@ -141,7 +152,10 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ProfileHeader(modifier: Modifier = Modifier) {
+private fun ProfileHeader(
+    modifier: Modifier = Modifier,
+    onEditProfileClick: () -> Unit = {}
+) {
     RouteFitProfileCard(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -212,7 +226,7 @@ private fun ProfileHeader(modifier: Modifier = Modifier) {
         )
 
         Button(
-            onClick = {},
+            onClick = onEditProfileClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 22.dp)

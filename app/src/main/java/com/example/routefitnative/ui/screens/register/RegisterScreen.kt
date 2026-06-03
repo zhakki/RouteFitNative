@@ -1,4 +1,4 @@
-package com.example.routefitnative.ui.screens.login
+package com.example.routefitnative.ui.screens.register
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -7,17 +7,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,25 +35,27 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.routefitnative.ui.components.RouteFitPrimaryButton
-import com.example.routefitnative.ui.components.RouteFitSocialButton
 import com.example.routefitnative.ui.components.RouteFitTextField
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
+import com.example.routefitnative.ui.theme.RouteFitOnAccent
 import com.example.routefitnative.ui.theme.RouteFitOutline
 import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun LoginScreen(
+fun RegisterScreen(
     modifier: Modifier = Modifier,
-    onLoginClick: () -> Unit = {},
-    onRegisterClick: () -> Unit = {}
+    onRegisterClick: () -> Unit = {},
+    onBackToLoginClick: () -> Unit = {}
 ) {
+    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var repeatPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var repeatPasswordVisible by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -89,23 +91,21 @@ fun LoginScreen(
                 fontStyle = FontStyle.Italic
             )
 
-            Text(
-                text = "Täpselt loodud tänapäeva sportlasele.",
-                modifier = Modifier.padding(top = 24.dp, start = 20.dp, end = 20.dp),
-                color = RouteFitTextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.ExtraBold
-            )
-
-            LoginCard(
+            RegisterCard(
+                name = name,
+                onNameChange = { name = it },
                 email = email,
                 onEmailChange = { email = it },
                 password = password,
                 onPasswordChange = { password = it },
+                repeatPassword = repeatPassword,
+                onRepeatPasswordChange = { repeatPassword = it },
                 passwordVisible = passwordVisible,
                 onPasswordVisibilityChange = { passwordVisible = !passwordVisible },
-                onLoginClick = onLoginClick,
+                repeatPasswordVisible = repeatPasswordVisible,
+                onRepeatPasswordVisibilityChange = { repeatPasswordVisible = !repeatPasswordVisible },
                 onRegisterClick = onRegisterClick,
+                onBackToLoginClick = onBackToLoginClick,
                 modifier = Modifier.padding(top = 54.dp)
             )
         }
@@ -113,15 +113,21 @@ fun LoginScreen(
 }
 
 @Composable
-private fun LoginCard(
+private fun RegisterCard(
+    name: String,
+    onNameChange: (String) -> Unit,
     email: String,
     onEmailChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
+    repeatPassword: String,
+    onRepeatPasswordChange: (String) -> Unit,
     passwordVisible: Boolean,
     onPasswordVisibilityChange: () -> Unit,
-    onLoginClick: () -> Unit,
+    repeatPasswordVisible: Boolean,
+    onRepeatPasswordVisibilityChange: () -> Unit,
     onRegisterClick: () -> Unit,
+    onBackToLoginClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -144,23 +150,32 @@ private fun LoginCard(
             modifier = Modifier.padding(horizontal = 30.dp, vertical = 34.dp)
         ) {
             Text(
-                text = "Tere tagasi!",
+                text = "Loo konto",
                 color = RouteFitTextPrimary,
                 style = MaterialTheme.typography.headlineLarge
             )
             Text(
-                text = "Jälgi oma aktiivsust ja tulemusi.",
+                text = "Loo RouteFit konto ja alusta oma teekonda juba täna",
                 modifier = Modifier.padding(top = 16.dp),
                 color = RouteFitTextSecondary,
                 style = MaterialTheme.typography.bodyMedium
             )
 
             RouteFitTextField(
+                label = "Nimi",
+                value = name,
+                onValueChange = onNameChange,
+                placeholder = "Näidis kasutaja",
+                modifier = Modifier.padding(top = 42.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+            )
+
+            RouteFitTextField(
                 label = "E-post",
                 value = email,
                 onValueChange = onEmailChange,
-                placeholder = "name@athlete.com",
-                modifier = Modifier.padding(top = 42.dp),
+                placeholder = "kasutaja@email.ee",
+                modifier = Modifier.padding(top = 28.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
 
@@ -169,31 +184,44 @@ private fun LoginCard(
                 value = password,
                 onValueChange = onPasswordChange,
                 placeholder = "........",
-                modifier = Modifier.padding(top = 34.dp),
+                modifier = Modifier.padding(top = 28.dp),
                 isPassword = true,
                 passwordVisible = passwordVisible,
                 onPasswordVisibilityChange = onPasswordVisibilityChange,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
 
-            TextButton(
-                onClick = {},
+            RouteFitTextField(
+                label = "Korda parooli",
+                value = repeatPassword,
+                onValueChange = onRepeatPasswordChange,
+                placeholder = "........",
+                modifier = Modifier.padding(top = 28.dp),
+                isPassword = true,
+                passwordVisible = repeatPasswordVisible,
+                onPasswordVisibilityChange = onRepeatPasswordVisibilityChange,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            )
+
+            Button(
+                onClick = onRegisterClick,
                 modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(top = 24.dp)
+                    .fillMaxWidth()
+                    .padding(top = 34.dp)
+                    .height(70.dp),
+                shape = RoundedCornerShape(36.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RouteFitAccent,
+                    contentColor = RouteFitOnAccent
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
             ) {
                 Text(
-                    text = "Unustasid parooli?",
-                    color = RouteFitAccent,
-                    style = MaterialTheme.typography.labelMedium
+                    text = "Registreeru",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
-
-            RouteFitPrimaryButton(
-                text = "Logi sisse",
-                onClick = onLoginClick,
-                modifier = Modifier.padding(top = 22.dp)
-            )
 
             Row(
                 modifier = Modifier
@@ -203,65 +231,19 @@ private fun LoginCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Uus RouteFitis?",
+                    text = "Kas sul on juba konto?",
                     color = RouteFitTextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
-                TextButton(onClick = onRegisterClick) {
+                TextButton(onClick = onBackToLoginClick) {
                     Text(
-                        text = "Loo konto",
+                        text = "Logi sisse",
                         color = RouteFitAccent,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .height(1.dp)
-                        .weight(1f)
-                        .background(RouteFitOutline)
-                )
-                Text(
-                    text = "VÕI JÄTKA",
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = RouteFitTextSecondary,
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Box(
-                    modifier = Modifier
-                        .height(1.dp)
-                        .weight(1f)
-                        .background(RouteFitOutline)
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 28.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                RouteFitSocialButton(
-                    provider = "Google",
-                    mark = "G",
-                    modifier = Modifier.weight(1f)
-                )
-                RouteFitSocialButton(
-                    provider = "Apple",
-                    mark = "A",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.size(4.dp))
         }
     }
 }

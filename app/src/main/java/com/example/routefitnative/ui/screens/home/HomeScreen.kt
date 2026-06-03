@@ -52,12 +52,18 @@ import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(
+    modifier: Modifier = Modifier,
+    onBottomNavItemClick: (BottomNavItem) -> Unit = {}
+) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
         bottomBar = {
-            BottomNavigationBar(selectedItem = BottomNavItem.Home)
+            BottomNavigationBar(
+                selectedItem = BottomNavItem.Home,
+                onItemClick = onBottomNavItemClick
+            )
         }
     ) { innerPadding ->
         Box(
