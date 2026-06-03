@@ -108,37 +108,51 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         trackingService?.stopTracking()
     }
 
-    suspend fun saveCurrentRoute() {
-        val userId = auth.currentUser?.uid ?: return
+    suspend fun finishAndSaveRoute(): Boolean {
+        return try {
+            val userId = auth.currentUser?.uid ?: return false
 
-        val points = _routePoints.value
-        val distanceMeters = _totalDistance.value
-        val duration = _duration.value
-        val finalSteps = _steps.value
+            val points = _routePoints.value
+            val distanceMeters = _totalDistance.value
+            val durationValue = _duration.value
+            val finalSteps = _steps.value
 
-        if (points.isEmpty()) return
+            if (points.isEmpty()) {
+                stopTracking()
+                return true
+            }
 
-        val profile = userRepository.getUserProfile(userId)
-        val weight = profile?.weightKg ?: 70.0
-        val calories = (weight * (distanceMeters / 1000.0) * 0.9).toInt()
+            // 1. Peatame kõigepealt teenuse (et andmed enam ei muutuks ja teavitus kaoks)
+            stopTracking()
 
-        val routeModel = RouteModel(
-            userId = userId,
-            title = "Uus marsruut",
-            startTime = System.currentTimeMillis() - duration.toMillis(),
-            endTime = System.currentTimeMillis(),
-            distanceKm = distanceMeters / 1000.0,
-            durationSeconds = duration.seconds.toInt(),
-            steps = finalSteps,
-            calories = calories,
-            averageSpeed = if (duration.seconds > 0) (distanceMeters / 1000.0) / (duration.seconds / 3600.0) else 0.0,
-            activityType = "walking"
-        )
+            // 2. Arvutame andmed
+            val profile = userRepository.getUserProfile(userId)
+            val weight = profile?.weightKg ?: 70.0
+            val calories = (weight * (distanceMeters / 1000.0) * 0.9).toInt()
 
-        routeRepository.saveRoute(userId, routeModel)
+            val routeModel = RouteModel(
+                userId = userId,
+                title = "Uus marsruut",
+                startTime = System.currentTimeMillis() - durationValue.toMillis(),
+                endTime = System.currentTimeMillis(),
+                distanceKm = distanceMeters / 1000.0,
+                durationSeconds = durationValue.seconds.toInt(),
+                steps = finalSteps,
+                calories = calories,
+                averageSpeed = if (durationValue.seconds > 0) (distanceMeters / 1000.0) / (durationValue.seconds / 3600.0) else 0.0,
+                activityType = "walking"
+            )
 
-        // After saving, we can finally stop everything
-        stopTracking()
+            // 3. Salvestame andmed Firebase'i
+            routeRepository.saveRoute(userId, routeModel)
+            
+            // TODO: Add StatisticsService here later when implemented in Kotlin
+
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     override fun onCleared() {

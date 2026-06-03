@@ -42,6 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.Duration
 
+private const val DEFAULT_ZOOM = 18f
+
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
@@ -136,11 +138,13 @@ fun MapScreen(
                                 delay(600) // Wait for animation
                             }
                             
-                            // 2. Save route (which also stops tracking)
-                            trackingViewModel.saveCurrentRoute()
+                            // 2. Save route (stops tracking internally)
+                            val success = trackingViewModel.finishAndSaveRoute()
                             
-                            // 3. Navigate
-                            onStopClick()
+                            // 3. Navigate only on success
+                            if (success) {
+                                onStopClick()
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -229,7 +233,7 @@ private fun MapPreview(
     onLocationLoaded: () -> Unit
 ) {
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(59.437, 24.753), 15f)
+        position = CameraPosition.fromLatLngZoom(LatLng(59.437, 24.753), DEFAULT_ZOOM)
     }
 
     var googleMap by remember { mutableStateOf<com.google.android.gms.maps.GoogleMap?>(null) }
@@ -245,7 +249,7 @@ private fun MapPreview(
             if (location != null) {
                 cameraPositionState.position = CameraPosition.fromLatLngZoom(
                     LatLng(location.latitude, location.longitude), 
-                    15f
+                    DEFAULT_ZOOM
                 )
             }
         } catch (e: SecurityException) {
@@ -259,7 +263,7 @@ private fun MapPreview(
     LaunchedEffect(routePoints) {
         if (routePoints.isNotEmpty() && !isPaused) {
             cameraPositionState.animate(
-                update = CameraUpdateFactory.newLatLng(routePoints.last())
+                update = CameraUpdateFactory.newLatLngZoom(routePoints.last(), DEFAULT_ZOOM)
             )
         }
     }
