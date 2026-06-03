@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-//import androidx.lifecycle.LifecycleService
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -29,8 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Timer
-import java.util.TimerTask
 
 class TrackingService : Service() {
 
@@ -158,11 +155,22 @@ class TrackingService : Service() {
     fun stopTracking() {
         _isTracking.value = false
         _isPaused.value = false
+        _routePoints.value = emptyList()
+        _totalDistance.value = 0.0
+        _duration.value = java.time.Duration.ZERO
+        
         timerJob?.cancel()
         timerJob = null
         stepSensor.stopCounting()
+        
         fusedLocationClient.removeLocationUpdates(locationCallback)
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 

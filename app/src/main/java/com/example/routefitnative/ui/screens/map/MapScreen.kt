@@ -1,6 +1,5 @@
 package com.example.routefitnative.ui.screens.map
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -56,6 +55,7 @@ fun MapScreen(
     val isPaused by trackingViewModel.isPaused.collectAsState()
     val duration by trackingViewModel.duration.collectAsState()
     val totalDistance by trackingViewModel.totalDistance.collectAsState()
+    val isSaving by trackingViewModel.isSaving.collectAsState()
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -73,91 +73,111 @@ fun MapScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(RouteFitBackground)
-                .padding(innerPadding)
-        ) {
-            Text(
-                text = "RouteFit",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 34.dp, bottom = 26.dp),
-                color = RouteFitAccent,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 46.sp,
-                    lineHeight = 52.sp
-                ),
-                fontStyle = FontStyle.Italic,
-                textAlign = TextAlign.Center
-            )
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = "RouteFit",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 34.dp, bottom = 26.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontSize = 46.sp,
+                        lineHeight = 52.sp
+                    ),
+                    fontStyle = FontStyle.Italic,
+                    textAlign = TextAlign.Center
+                )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                MapStatCard(
-                    label = "Tempo",
-                    value = formatPace(totalDistance, duration),
-                    unit = "/km",
-                    modifier = Modifier.weight(1f)
-                )
-                MapStatCard(
-                    label = "Vahemaa",
-                    value = if (totalDistance < 1000) "%.0f".format(totalDistance) else "%.2f".format(totalDistance / 1000),
-                    unit = if (totalDistance < 1000) "m" else "km",
-                    modifier = Modifier.weight(1f)
-                )
-                MapStatCard(
-                    label = "Aeg",
-                    value = formatDuration(duration),
-                    unit = "",
-                    modifier = Modifier.weight(1f)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    MapStatCard(
+                        label = "Tempo",
+                        value = formatPace(totalDistance, duration),
+                        unit = "/km",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MapStatCard(
+                        label = "Vahemaa",
+                        value = if (totalDistance < 1000) "%.0f".format(totalDistance) else "%.2f".format(totalDistance / 1000),
+                        unit = if (totalDistance < 1000) "m" else "km",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MapStatCard(
+                        label = "Aeg",
+                        value = formatDuration(duration),
+                        unit = "",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
+                    MapPreview(
+                        routePoints = routePoints,
+                        isTracking = isTracking,
+                        isPaused = isPaused,
+                        onStartClick = { trackingViewModel.startTracking() },
+                        onPauseClick = { 
+                            if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
+                        },
+                        onStopRequested = { map ->
+                            scope.launch {
+                                // 1. Visual zoom out
+                                try {
+                                    if (routePoints.size >= 2 && map != null) {
+                                        val builder = LatLngBounds.builder()
+                                        routePoints.forEach { builder.include(it) }
+                                        map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
+                                        delay(600)
+                                    }
+                                } catch (e: Exception) {}
+
+                                // 2. Definitive stop and save (Firebase stubbed for now)
+                                val success = trackingViewModel.finishAndSaveRoute()
+                                
+                                // 3. RE-ENABLED: Navigate on success
+                                if (success) {
+                                    onStopClick()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        fusedLocationClient = fusedLocationClient,
+                        onLocationLoaded = { isMapLoading = false }
+                    )
+                    
+                    if (isMapLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(RouteFitBackground),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = RouteFitAccent)
+                        }
+                    }
+                }
             }
 
-            Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
-                MapPreview(
-                    routePoints = routePoints,
-                    isTracking = isTracking,
-                    isPaused = isPaused,
-                    onStartClick = { trackingViewModel.startTracking() },
-                    onPauseClick = { 
-                        if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
-                    },
-                    onStopRequested = { map ->
-                        scope.launch {
-                            // 1. Zoom out to fit route
-                            if (routePoints.size >= 2) {
-                                val builder = LatLngBounds.builder()
-                                routePoints.forEach { builder.include(it) }
-                                map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
-                                delay(600) // Wait for animation
-                            }
-                            
-                            // 2. Save route (stops tracking internally)
-                            val success = trackingViewModel.finishAndSaveRoute()
-                            
-                            // 3. Navigate only on success
-                            if (success) {
-                                onStopClick()
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    fusedLocationClient = fusedLocationClient,
-                    onLocationLoaded = { isMapLoading = false }
-                )
-                
-                if (isMapLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(RouteFitBackground),
-                        contentAlignment = Alignment.Center
-                    ) {
+            if (isSaving) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable(enabled = false) {},
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = RouteFitAccent)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "Salvestamine...",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -227,7 +247,7 @@ private fun MapPreview(
     isPaused: Boolean,
     onStartClick: () -> Unit,
     onPauseClick: () -> Unit,
-    onStopRequested: (com.google.android.gms.maps.GoogleMap) -> Unit,
+    onStopRequested: (com.google.android.gms.maps.GoogleMap?) -> Unit,
     modifier: Modifier = Modifier,
     fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
     onLocationLoaded: () -> Unit
@@ -238,11 +258,10 @@ private fun MapPreview(
 
     var googleMap by remember { mutableStateOf<com.google.android.gms.maps.GoogleMap?>(null) }
 
-    // Set initial location using getCurrentLocation for accuracy
     LaunchedEffect(Unit) {
         try {
             val location = fusedLocationClient.getCurrentLocation(
-                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+                Priority.PRIORITY_HIGH_ACCURACY,
                 null
             ).await()
             
@@ -253,26 +272,20 @@ private fun MapPreview(
                 )
             }
         } catch (e: SecurityException) {
-            // No permission
         } finally {
             onLocationLoaded()
         }
     }
 
-    // Auto-follow logic
     LaunchedEffect(routePoints) {
-        if (routePoints.isNotEmpty() && !isPaused) {
+        if (routePoints.isNotEmpty() && !isPaused && isTracking) {
             cameraPositionState.animate(
                 update = CameraUpdateFactory.newLatLngZoom(routePoints.last(), DEFAULT_ZOOM)
             )
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(RouteFitBackground)
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.matchParentSize(),
             cameraPositionState = cameraPositionState,
@@ -281,10 +294,7 @@ private fun MapPreview(
                 myLocationButtonEnabled = false,
                 zoomControlsEnabled = false,
                 mapToolbarEnabled = false
-            ),
-            onMapLoaded = {
-                // Controller available
-            }
+            )
         ) {
             MapEffect(Unit) { map ->
                 googleMap = map
@@ -300,7 +310,6 @@ private fun MapPreview(
             }
         }
 
-        // Overlay to maintain the stylized look of the original UI
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -322,12 +331,7 @@ private fun MapPreview(
                 .size(68.dp),
             shape = CircleShape,
             color = RouteFitSurface.copy(alpha = 0.8f),
-            border = BorderStroke(2.dp, RouteFitAccent.copy(alpha = 0.76f)),
-            onClick = {
-                if (routePoints.isNotEmpty()) {
-                    // Manual re-center logic
-                }
-            }
+            border = BorderStroke(2.dp, RouteFitAccent.copy(alpha = 0.76f))
         ) {
             Box(contentAlignment = Alignment.Center) {
                 MyLocationIcon(
@@ -343,7 +347,7 @@ private fun MapPreview(
             onStartClick = onStartClick,
             onPauseClick = onPauseClick,
             onStopClick = {
-                googleMap?.let { onStopRequested(it) }
+                onStopRequested(googleMap)
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -539,7 +543,7 @@ private fun StopIcon(modifier: Modifier = Modifier, color: Color) {
     )
 }
 
-private fun formatDuration(duration: Duration): String {
+private fun formatDuration(duration: java.time.Duration): String {
     val seconds = duration.seconds % 60
     val minutes = (duration.seconds / 60) % 60
     val hours = duration.seconds / 3600
@@ -550,7 +554,7 @@ private fun formatDuration(duration: Duration): String {
     }
 }
 
-private fun formatPace(distanceMeters: Double, duration: Duration): String {
+private fun formatPace(distanceMeters: Double, duration: java.time.Duration): String {
     if (distanceMeters <= 0 || duration.seconds <= 0) return "0'00"
     val distanceKm = distanceMeters / 1000.0
     val totalSecondsPerKm = (duration.seconds / distanceKm).toInt()
