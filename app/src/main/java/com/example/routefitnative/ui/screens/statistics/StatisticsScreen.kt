@@ -24,6 +24,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -37,22 +42,103 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
-import com.example.routefitnative.ui.theme.RouteFitOnAccent
 import com.example.routefitnative.ui.theme.RouteFitOutline
 import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun StatisticsScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {}
 ) {
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    var uiState by remember { mutableStateOf(StatisticsUiState()) }
+
+    LaunchedEffect(Unit) {
+        val currentUser = authRepository.currentUser
+
+        if (currentUser == null) {
+            uiState = uiState.copy(errorMessage = "Kasutaja pole sisse logitud.")
+            return@LaunchedEffect
+        }
+
+        try {
+            val settings = userRepository.getUserSettings(currentUser.uid)
+            val routes = loadStatisticRoutes(db, currentUser.uid)
+            val summaries = loadStatisticDailySummaries(db, currentUser.uid)
+
+            val weekDates = currentWeekDates()
+            val routeStepsByDate = routes
+                .groupBy { it.date }
+                .mapValues { entry -> entry.value.sumOf { it.steps } }
+
+            val dailySteps = weekDates.map { date ->
+                summaries[date]?.totalSteps
+                    ?: routeStepsByDate[date]
+                    ?: 0
+            }
+
+            val dailyCalories = weekDates.map { date ->
+                summaries[date]?.calories
+                    ?: routes.filter { it.date == date }.sumOf { it.calories }
+            }
+
+            val dailyDistanceKm = weekDates.map { date ->
+                summaries[date]?.distanceKm
+                    ?: routes.filter { it.date == date }.sumOf { it.distanceKm }
+            }
+
+            val weekSteps = dailySteps.sum()
+            val weekCalories = dailyCalories.sum()
+            val weekDistanceKm = dailyDistanceKm.sum()
+
+            val daysWithData = dailySteps.count { it > 0 }.coerceAtLeast(1)
+            val averageSteps = weekSteps / daysWithData
+
+            val completedDays = dailySteps.count { it >= settings.dailyStepGoal }
+
+            val recentRoutes = routes
+                .sortedByDescending { it.timeMillis }
+                .take(3)
+
+            uiState = StatisticsUiState(
+                dailyGoal = settings.dailyStepGoal,
+                distanceUnit = settings.distanceUnit,
+                averageSteps = averageSteps,
+                completedGoalDays = completedDays,
+                weekCalories = weekCalories,
+                weekDistanceKm = weekDistanceKm,
+                weekSteps = weekSteps,
+                dailySteps = dailySteps,
+                recentRoutes = recentRoutes,
+                routeCount = routes.size,
+                errorMessage = ""
+            )
+        } catch (e: Exception) {
+            uiState = uiState.copy(
+                errorMessage = e.message ?: "Statistika laadimine ebaõnnestus."
+            )
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
@@ -125,10 +211,14 @@ fun StatisticsScreen(
                 )
 
                 WeeklyStatsCard(
+                    averageSteps = uiState.averageSteps,
+                    completedGoalDays = uiState.completedGoalDays,
                     modifier = Modifier.padding(top = 22.dp)
                 )
 
                 ActivityChartCard(
+                    dailySteps = uiState.dailySteps,
+                    dailyGoal = uiState.dailyGoal,
                     modifier = Modifier.padding(top = 18.dp)
                 )
 
@@ -140,13 +230,13 @@ fun StatisticsScreen(
                 ) {
                     SmallStatsCard(
                         title = "Kalorid",
-                        value = "327 kcal",
+                        value = "${formatSteps(uiState.weekCalories)} kcal",
                         description = "põletatud",
                         modifier = Modifier.weight(1f)
                     )
                     SmallStatsCard(
                         title = "Vahemaa",
-                        value = "6.4 km",
+                        value = formatDistance(uiState.weekDistanceKm, uiState.distanceUnit),
                         description = "jälgitud",
                         modifier = Modifier.weight(1f)
                     )
@@ -164,14 +254,26 @@ fun StatisticsScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     AchievementCard(
-                        title = "Esimene marsruut",
-                        detail = "Alustatud",
+                        title = "Marsruudid",
+                        detail = "${uiState.routeCount} kokku",
                         modifier = Modifier.weight(1f)
                     )
                     AchievementCard(
                         title = "Kalorid",
-                        detail = "327 kcal",
+                        detail = "${formatSteps(uiState.weekCalories)} kcal",
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (uiState.errorMessage.isNotBlank()) {
+                    Text(
+                        text = uiState.errorMessage,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        color = RouteFitAccent,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
                     )
                 }
 
@@ -180,29 +282,38 @@ fun StatisticsScreen(
                     modifier = Modifier.padding(top = 24.dp)
                 )
 
-                RecentRouteRow(
-                    date = "02.06",
-                    title = "Uus marsruut",
-                    distance = "3.8 km",
-                    duration = "38 min",
-                    calories = "195 kcal",
-                    modifier = Modifier.padding(top = 14.dp)
-                )
-                RecentRouteRow(
-                    date = "01.06",
-                    title = "Õhtune jalutuskäik",
-                    distance = "2.6 km",
-                    duration = "27 min",
-                    calories = "132 kcal",
-                    modifier = Modifier.padding(top = 12.dp)
-                )
+                if (uiState.recentRoutes.isEmpty()) {
+                    Text(
+                        text = "Marsruute pole veel salvestatud",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp),
+                        color = RouteFitTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    uiState.recentRoutes.forEachIndexed { index, route ->
+                        RecentRouteRow(
+                            date = formatShortDate(route.timeMillis),
+                            title = route.title,
+                            distance = formatDistance(route.distanceKm, uiState.distanceUnit),
+                            duration = formatDuration(route.durationSeconds),
+                            calories = "${route.calories} kcal",
+                            modifier = Modifier.padding(top = if (index == 0) 14.dp else 12.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun WeeklyStatsCard(modifier: Modifier = Modifier) {
+private fun WeeklyStatsCard(
+    averageSteps: Int,
+    completedGoalDays: Int,
+    modifier: Modifier = Modifier
+) {
     RouteFitStatsCard(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -216,7 +327,7 @@ private fun WeeklyStatsCard(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    text = "3 715",
+                    text = formatSteps(averageSteps),
                     modifier = Modifier.padding(top = 18.dp),
                     color = RouteFitTextPrimary,
                     style = MaterialTheme.typography.headlineLarge.copy(
@@ -245,7 +356,7 @@ private fun WeeklyStatsCard(modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "0/7",
+                        text = "$completedGoalDays/7",
                         color = RouteFitAccent,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold
@@ -263,7 +374,11 @@ private fun WeeklyStatsCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ActivityChartCard(modifier: Modifier = Modifier) {
+private fun ActivityChartCard(
+    dailySteps: List<Int>,
+    dailyGoal: Int,
+    modifier: Modifier = Modifier
+) {
     RouteFitStatsCard(modifier = modifier) {
         Text(
             text = "Aktiivsus päevade kaupa",
@@ -272,6 +387,8 @@ private fun ActivityChartCard(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.ExtraBold
         )
         ActivityLineChart(
+            dailySteps = dailySteps,
+            dailyGoal = dailyGoal,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp)
@@ -283,10 +400,12 @@ private fun ActivityChartCard(modifier: Modifier = Modifier) {
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            val todayIndex = todayWeekIndex()
+
             listOf("E", "T", "K", "N", "R", "L", "P").forEachIndexed { index, day ->
                 Text(
                     text = day,
-                    color = if (index == 1) RouteFitAccent else RouteFitTextSecondary,
+                    color = if (index == todayIndex) RouteFitAccent else RouteFitTextSecondary,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -296,8 +415,25 @@ private fun ActivityChartCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ActivityLineChart(modifier: Modifier = Modifier) {
-    val values = listOf(0.18f, 0.54f, 0.32f, 0.7f, 0.46f, 0.78f, 0.58f)
+private fun ActivityLineChart(
+    dailySteps: List<Int>,
+    dailyGoal: Int,
+    modifier: Modifier = Modifier
+) {
+    val maxValue = maxOf(
+        dailyGoal,
+        dailySteps.maxOrNull() ?: 0,
+        1
+    )
+
+    val values = dailySteps
+        .ifEmpty { List(7) { 0 } }
+        .take(7)
+        .map { steps ->
+            (steps.toFloat() / maxValue.toFloat()).coerceIn(0.04f, 1f)
+        }
+
+    val todayIndex = todayWeekIndex()
 
     Canvas(modifier = modifier) {
         val horizontalPadding = 12.dp.toPx()
@@ -308,6 +444,7 @@ private fun ActivityLineChart(modifier: Modifier = Modifier) {
                 y = size.height - (size.height * value)
             )
         }
+
         val mutedStroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
         val accentStroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
 
@@ -320,17 +457,22 @@ private fun ActivityLineChart(modifier: Modifier = Modifier) {
                 cap = StrokeCap.Round
             )
         }
-        points.take(2).zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = RouteFitAccent,
-                start = start,
-                end = end,
-                strokeWidth = accentStroke.width,
-                cap = StrokeCap.Round
-            )
-        }
+
+        points.take(todayIndex + 1)
+            .zipWithNext()
+            .forEach { (start, end) ->
+                drawLine(
+                    color = RouteFitAccent,
+                    start = start,
+                    end = end,
+                    strokeWidth = accentStroke.width,
+                    cap = StrokeCap.Round
+                )
+            }
+
         points.forEachIndexed { index, point ->
-            val selected = index == 1
+            val selected = index == todayIndex
+
             drawCircle(
                 color = if (selected) RouteFitAccent.copy(alpha = 0.18f) else Color.Transparent,
                 radius = if (selected) 15.dp.toPx() else 0f,
@@ -506,5 +648,192 @@ private fun RouteFitStatsCard(
             modifier = Modifier.padding(22.dp),
             content = content
         )
+    }
+}
+
+private data class StatisticsUiState(
+    val dailyGoal: Int = 24000,
+    val distanceUnit: String = "km",
+    val averageSteps: Int = 0,
+    val completedGoalDays: Int = 0,
+    val weekCalories: Int = 0,
+    val weekDistanceKm: Double = 0.0,
+    val weekSteps: Int = 0,
+    val dailySteps: List<Int> = List(7) { 0 },
+    val recentRoutes: List<StatisticRouteSummary> = emptyList(),
+    val routeCount: Int = 0,
+    val errorMessage: String = ""
+)
+
+private data class StatisticDailySummary(
+    val date: String,
+    val totalSteps: Int,
+    val calories: Int,
+    val distanceKm: Double,
+    val durationSeconds: Long
+)
+
+private data class StatisticRouteSummary(
+    val title: String,
+    val date: String,
+    val timeMillis: Long,
+    val distanceKm: Double,
+    val durationSeconds: Long,
+    val steps: Int,
+    val calories: Int
+)
+
+private suspend fun loadStatisticDailySummaries(
+    db: FirebaseFirestore,
+    uid: String
+): Map<String, StatisticDailySummary> {
+    val snapshot = db.collection("users")
+        .document(uid)
+        .collection("daily_summaries")
+        .get()
+        .await()
+
+    return snapshot.documents.associate { document ->
+        val date = document.getString("date") ?: document.id
+
+        date to StatisticDailySummary(
+            date = date,
+            totalSteps = document.getNumberInt("totalSteps"),
+            calories = document.getNumberInt("calories"),
+            distanceKm = document.getNumberDouble("distanceKm"),
+            durationSeconds = document.getNumberLong("durationSeconds")
+        )
+    }
+}
+
+private suspend fun loadStatisticRoutes(
+    db: FirebaseFirestore,
+    uid: String
+): List<StatisticRouteSummary> {
+    val snapshot = db.collection("users")
+        .document(uid)
+        .collection("routes")
+        .get()
+        .await()
+
+    return snapshot.documents.map { document ->
+        val timeMillis = document.getTimeMillis("startTime")
+            ?: document.getTimeMillis("createdAt")
+            ?: System.currentTimeMillis()
+
+        StatisticRouteSummary(
+            title = document.getString("title") ?: "Marsruut",
+            date = dateStringFromMillis(timeMillis),
+            timeMillis = timeMillis,
+            distanceKm = document.getNumberDouble("distanceKm"),
+            durationSeconds = document.getNumberLong("durationSeconds"),
+            steps = document.getNumberInt("steps"),
+            calories = document.getNumberInt("calories")
+        )
+    }
+}
+
+private fun DocumentSnapshot.getNumberInt(fieldName: String): Int {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toInt()
+        else -> 0
+    }
+}
+
+private fun DocumentSnapshot.getNumberLong(fieldName: String): Long {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toLong()
+        else -> 0L
+    }
+}
+
+private fun DocumentSnapshot.getNumberDouble(fieldName: String): Double {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toDouble()
+        else -> 0.0
+    }
+}
+
+private fun DocumentSnapshot.getTimeMillis(fieldName: String): Long? {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Timestamp -> value.toDate().time
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        else -> null
+    }
+}
+
+private fun currentWeekDates(): List<String> {
+    val calendar = Calendar.getInstance()
+    val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+
+    val mondayOffset = if (dayOfWeek == Calendar.SUNDAY) {
+        -6
+    } else {
+        Calendar.MONDAY - dayOfWeek
+    }
+
+    calendar.add(Calendar.DAY_OF_MONTH, mondayOffset)
+
+    return (0..6).map { index ->
+        val dayCalendar = calendar.clone() as Calendar
+        dayCalendar.add(Calendar.DAY_OF_MONTH, index)
+        dateStringFromMillis(dayCalendar.timeInMillis)
+    }
+}
+
+private fun todayWeekIndex(): Int {
+    val dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+
+    return if (dayOfWeek == Calendar.SUNDAY) {
+        6
+    } else {
+        dayOfWeek - Calendar.MONDAY
+    }
+}
+
+private fun dateStringFromMillis(timeMillis: Long): String {
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(timeMillis)
+}
+
+private fun formatShortDate(timeMillis: Long): String {
+    return SimpleDateFormat("dd.MM", Locale.US).format(timeMillis)
+}
+
+private fun formatSteps(value: Int): String {
+    return String.format(Locale.US, "%,d", value).replace(",", " ")
+}
+
+private fun formatDistance(distanceKm: Double, distanceUnit: String): String {
+    return if (distanceUnit == "mi") {
+        val miles = distanceKm * 0.621371
+        "${formatOneDecimal(miles)} mi"
+    } else {
+        "${formatOneDecimal(distanceKm)} km"
+    }
+}
+
+private fun formatOneDecimal(value: Double): String {
+    return String.format(Locale.US, "%.1f", value)
+}
+
+private fun formatDuration(durationSeconds: Long): String {
+    val totalMinutes = (durationSeconds / 60).coerceAtLeast(0)
+
+    return if (totalMinutes < 60) {
+        "$totalMinutes min"
+    } else {
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        "${hours}h ${minutes}min"
     }
 }
