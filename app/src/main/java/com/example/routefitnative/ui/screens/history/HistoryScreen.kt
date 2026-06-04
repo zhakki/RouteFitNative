@@ -25,9 +25,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -38,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
 import com.example.routefitnative.ui.theme.RouteFitAccent
@@ -48,6 +56,13 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun HistoryScreen(
@@ -55,6 +70,39 @@ fun HistoryScreen(
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
     onRouteClick: () -> Unit = {}
 ) {
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    var uiState by remember { mutableStateOf(HistoryUiState()) }
+
+    LaunchedEffect(Unit) {
+        val currentUser = authRepository.currentUser
+
+        if (currentUser == null) {
+            uiState = uiState.copy(errorMessage = "Kasutaja pole sisse logitud.")
+            return@LaunchedEffect
+        }
+
+        try {
+            val settings = userRepository.getUserSettings(currentUser.uid)
+            val routes = loadHistoryRoutes(db, currentUser.uid)
+                .filter { it.timeMillis >= thirtyDaysAgoMillis() }
+                .sortedByDescending { it.timeMillis }
+
+            uiState = HistoryUiState(
+                distanceUnit = settings.distanceUnit,
+                totalDistanceKm = routes.sumOf { it.distanceKm },
+                routes = routes,
+                errorMessage = ""
+            )
+        } catch (e: Exception) {
+            uiState = uiState.copy(
+                errorMessage = e.message ?: "Ajaloo laadimine ebaõnnestus."
+            )
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
@@ -125,30 +173,47 @@ fun HistoryScreen(
                 }
 
                 TotalDistanceCard(
+                    totalDistanceKm = uiState.totalDistanceKm,
+                    distanceUnit = uiState.distanceUnit,
                     modifier = Modifier.padding(top = 18.dp)
                 )
 
-                RouteHistoryCard(
-                    title = "Uus marsruut",
-                    date = "02.06 • 08:27",
-                    distance = "3.8 km",
-                    duration = "38 min",
-                    steps = "3 689",
-                    calories = "195 kcal",
-                    onClick = onRouteClick,
-                    modifier = Modifier.padding(top = 18.dp)
-                )
+                if (uiState.errorMessage.isNotBlank()) {
+                    Text(
+                        text = uiState.errorMessage,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        color = RouteFitAccent,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                }
 
-                RouteHistoryCard(
-                    title = "Õhtune jalutuskäik",
-                    date = "01.06 • 19:12",
-                    distance = "2.6 km",
-                    duration = "27 min",
-                    steps = "2 940",
-                    calories = "132 kcal",
-                    onClick = onRouteClick,
-                    modifier = Modifier.padding(top = 18.dp)
-                )
+                if (uiState.routes.isEmpty()) {
+                    Text(
+                        text = "Viimase 30 päeva jooksul marsruute pole.",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 22.dp),
+                        color = RouteFitTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    uiState.routes.forEach { route ->
+                        RouteHistoryCard(
+                            title = route.title,
+                            date = formatRouteDate(route.timeMillis),
+                            distance = formatDistance(route.distanceKm, uiState.distanceUnit),
+                            duration = formatDuration(route.durationSeconds),
+                            steps = formatSteps(route.steps),
+                            calories = "${formatSteps(route.calories)} kcal",
+                            onClick = onRouteClick,
+                            modifier = Modifier.padding(top = 18.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -174,7 +239,11 @@ private fun FilterChip(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TotalDistanceCard(modifier: Modifier = Modifier) {
+private fun TotalDistanceCard(
+    totalDistanceKm: Double,
+    distanceUnit: String,
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = RouteFitSurface.copy(alpha = 0.94f),
@@ -195,7 +264,7 @@ private fun TotalDistanceCard(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(
-                    text = "19.4 km",
+                    text = formatDistance(totalDistanceKm, distanceUnit),
                     modifier = Modifier.padding(top = 12.dp),
                     color = RouteFitTextPrimary,
                     style = MaterialTheme.typography.headlineLarge.copy(
@@ -355,15 +424,15 @@ private fun TrendingIcon(modifier: Modifier = Modifier, color: Color) {
         drawPath(path = path, color = color, style = stroke)
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.66f, size.height * 0.24f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.84f, size.height * 0.24f),
+            start = Offset(size.width * 0.66f, size.height * 0.24f),
+            end = Offset(size.width * 0.84f, size.height * 0.24f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.84f, size.height * 0.24f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.84f, size.height * 0.42f),
+            start = Offset(size.width * 0.84f, size.height * 0.24f),
+            end = Offset(size.width * 0.84f, size.height * 0.42f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
@@ -374,44 +443,44 @@ private fun TrendingIcon(modifier: Modifier = Modifier, color: Color) {
 private fun WalkingIcon(modifier: Modifier = Modifier, color: Color) {
     Canvas(modifier = modifier) {
         val strokeWidth = 2.5.dp.toPx()
-        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+
         drawCircle(
             color = color,
             radius = size.minDimension * 0.1f,
-            center = androidx.compose.ui.geometry.Offset(size.width * 0.52f, size.height * 0.18f)
+            center = Offset(size.width * 0.52f, size.height * 0.18f)
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.5f, size.height * 0.3f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.42f, size.height * 0.55f),
+            start = Offset(size.width * 0.5f, size.height * 0.3f),
+            end = Offset(size.width * 0.42f, size.height * 0.55f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.46f, size.height * 0.4f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.26f, size.height * 0.5f),
+            start = Offset(size.width * 0.46f, size.height * 0.4f),
+            end = Offset(size.width * 0.26f, size.height * 0.5f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.48f, size.height * 0.42f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.66f, size.height * 0.5f),
+            start = Offset(size.width * 0.48f, size.height * 0.42f),
+            end = Offset(size.width * 0.66f, size.height * 0.5f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.42f, size.height * 0.55f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.28f, size.height * 0.82f),
+            start = Offset(size.width * 0.42f, size.height * 0.55f),
+            end = Offset(size.width * 0.28f, size.height * 0.82f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.42f, size.height * 0.55f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.66f, size.height * 0.82f),
+            start = Offset(size.width * 0.42f, size.height * 0.55f),
+            end = Offset(size.width * 0.66f, size.height * 0.82f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
@@ -424,17 +493,143 @@ private fun ArrowRightIcon(modifier: Modifier = Modifier, color: Color) {
         val strokeWidth = 2.8.dp.toPx()
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.28f, size.height * 0.22f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.66f, size.height * 0.5f),
+            start = Offset(size.width * 0.28f, size.height * 0.22f),
+            end = Offset(size.width * 0.66f, size.height * 0.5f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
             color = color,
-            start = androidx.compose.ui.geometry.Offset(size.width * 0.66f, size.height * 0.5f),
-            end = androidx.compose.ui.geometry.Offset(size.width * 0.28f, size.height * 0.78f),
+            start = Offset(size.width * 0.66f, size.height * 0.5f),
+            end = Offset(size.width * 0.28f, size.height * 0.78f),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
+    }
+}
+
+private data class HistoryUiState(
+    val distanceUnit: String = "km",
+    val totalDistanceKm: Double = 0.0,
+    val routes: List<HistoryRouteSummary> = emptyList(),
+    val errorMessage: String = ""
+)
+
+private data class HistoryRouteSummary(
+    val title: String,
+    val timeMillis: Long,
+    val distanceKm: Double,
+    val durationSeconds: Long,
+    val steps: Int,
+    val calories: Int
+)
+
+private suspend fun loadHistoryRoutes(
+    db: FirebaseFirestore,
+    uid: String
+): List<HistoryRouteSummary> {
+    val snapshot = db.collection("users")
+        .document(uid)
+        .collection("routes")
+        .get()
+        .await()
+
+    return snapshot.documents.map { document ->
+        val timeMillis = document.getTimeMillis("startTime")
+            ?: document.getTimeMillis("createdAt")
+            ?: System.currentTimeMillis()
+
+        HistoryRouteSummary(
+            title = document.getString("title")
+                ?: document.getString("name")
+                ?: "Marsruut",
+            timeMillis = timeMillis,
+            distanceKm = document.getNumberDouble("distanceKm")
+                .takeIf { it > 0.0 }
+                ?: document.getNumberDouble("distance"),
+            durationSeconds = document.getNumberLong("durationSeconds")
+                .takeIf { it > 0L }
+                ?: document.getNumberLong("duration"),
+            steps = document.getNumberInt("steps"),
+            calories = document.getNumberInt("calories")
+        )
+    }
+}
+
+private fun DocumentSnapshot.getNumberInt(fieldName: String): Int {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toInt()
+        else -> 0
+    }
+}
+
+private fun DocumentSnapshot.getNumberLong(fieldName: String): Long {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toLong()
+        else -> 0L
+    }
+}
+
+private fun DocumentSnapshot.getNumberDouble(fieldName: String): Double {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toDouble()
+        else -> 0.0
+    }
+}
+
+private fun DocumentSnapshot.getTimeMillis(fieldName: String): Long? {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Timestamp -> value.toDate().time
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        else -> null
+    }
+}
+
+private fun thirtyDaysAgoMillis(): Long {
+    val calendar = Calendar.getInstance()
+    calendar.add(Calendar.DAY_OF_YEAR, -30)
+    return calendar.timeInMillis
+}
+
+private fun formatRouteDate(timeMillis: Long): String {
+    return SimpleDateFormat("dd.MM • HH:mm", Locale.US).format(timeMillis)
+}
+
+private fun formatSteps(value: Int): String {
+    return String.format(Locale.US, "%,d", value).replace(",", " ")
+}
+
+private fun formatDistance(distanceKm: Double, distanceUnit: String): String {
+    return if (distanceUnit == "mi") {
+        val miles = distanceKm * 0.621371
+        "${formatOneDecimal(miles)} mi"
+    } else {
+        "${formatOneDecimal(distanceKm)} km"
+    }
+}
+
+private fun formatOneDecimal(value: Double): String {
+    return String.format(Locale.US, "%.1f", value)
+}
+
+private fun formatDuration(durationSeconds: Long): String {
+    val totalMinutes = (durationSeconds / 60).coerceAtLeast(0)
+
+    return if (totalMinutes < 60) {
+        "$totalMinutes min"
+    } else {
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        "${hours}h ${minutes}min"
     }
 }
