@@ -170,15 +170,21 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             action = "START"
         }
         ContextCompat.startForegroundService(getApplication(), intent)
-        trackingService?.startTracking()
+        viewModelScope.launch {
+            trackingService?.startTracking()
+        }
     }
 
     fun pauseTracking() {
-        trackingService?.pauseTracking()
+        viewModelScope.launch {
+            trackingService?.pauseTracking()
+        }
     }
 
     fun resumeTracking() {
-        trackingService?.resumeTracking()
+        viewModelScope.launch {
+            trackingService?.resumeTracking()
+        }
     }
 
     fun stopTracking() {
@@ -187,7 +193,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             action = "STOP"
         }
         getApplication<Application>().startService(intent)
-        trackingService?.stopTracking()
+        viewModelScope.launch {
+            trackingService?.stopTracking()
+        }
 
         _isTracking.value = false
         _isPaused.value = false
