@@ -56,7 +56,6 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,6 +63,7 @@ import java.util.Locale
 
 @Composable
 fun ResultScreen(
+    routeId: String,
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onBackHomeClick: () -> Unit = {}
@@ -74,7 +74,7 @@ fun ResultScreen(
     var route by remember { mutableStateOf<ResultRouteSummary?>(null) }
     var errorMessage by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(routeId) {
         val currentUser = auth.currentUser
 
         if (currentUser == null) {
@@ -83,7 +83,16 @@ fun ResultScreen(
         }
 
         try {
-            route = loadLastSavedRoute(db, currentUser.uid)
+            if (routeId.isBlank()) {
+                errorMessage = "Marsruudi ID puudub."
+                return@LaunchedEffect
+            }
+
+            route = loadRouteById(
+                db = db,
+                uid = currentUser.uid,
+                routeId = routeId
+            )
             errorMessage = ""
 
             if (route == null) {
@@ -633,19 +642,21 @@ private data class ResultRouteSummary(
     val averageSpeed: Double
 )
 
-private suspend fun loadLastSavedRoute(
+private suspend fun loadRouteById(
     db: FirebaseFirestore,
-    uid: String
+    uid: String,
+    routeId: String
 ): ResultRouteSummary? {
-    val snapshot = db.collection("users")
+    val document = db.collection("users")
         .document(uid)
         .collection("routes")
-        .orderBy("createdAt", Query.Direction.DESCENDING)
-        .limit(1)
+        .document(routeId)
         .get()
         .await()
 
-    val document = snapshot.documents.firstOrNull() ?: return null
+    if (!document.exists()) {
+        return null
+    }
 
     return document.toResultRouteSummary()
 }

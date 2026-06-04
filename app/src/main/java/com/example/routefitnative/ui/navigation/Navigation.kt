@@ -17,6 +17,8 @@ import com.example.routefitnative.ui.screens.result.ResultScreen
 import com.example.routefitnative.ui.screens.route_detail.RouteDetailScreen
 import com.example.routefitnative.ui.screens.settings.SettingsScreen
 import com.example.routefitnative.ui.screens.statistics.StatisticsScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 object RouteFitRoutes {
     const val LOGIN = "login"
@@ -29,6 +31,11 @@ object RouteFitRoutes {
     const val EDIT_PROFILE = "edit_profile"
     const val SETTINGS = "settings"
     const val RESULT = "result"
+    const val RESULT_WITH_ID = "result/{routeId}"
+
+    fun result(routeId: String): String {
+        return "$RESULT/$routeId"
+    }
     const val ROUTE_DETAIL = "route_detail"
 }
 
@@ -85,8 +92,8 @@ fun RouteFitNavigation() {
                 onBottomNavItemClick = { item ->
                     navController.navigateToBottomNavItem(item)
                 },
-                onStopClick = {
-                    navController.navigate(RouteFitRoutes.RESULT)
+                onStopClick = { routeId ->
+                    navController.navigate(RouteFitRoutes.result(routeId))
                 }
             )
         }
@@ -159,7 +166,16 @@ fun RouteFitNavigation() {
                 onCancelClick = navigateProfile
             )
         }
-        composable(RouteFitRoutes.RESULT) {
+        composable(
+            route = RouteFitRoutes.RESULT_WITH_ID,
+            arguments = listOf(
+                navArgument("routeId") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+            val routeId = backStackEntry.arguments?.getString("routeId").orEmpty()
+
             val navigateHome = {
                 navController.navigate(RouteFitRoutes.HOME) {
                     popUpTo(RouteFitRoutes.HOME) {
@@ -170,6 +186,7 @@ fun RouteFitNavigation() {
             }
 
             ResultScreen(
+                routeId = routeId,
                 onBackClick = navigateHome,
                 onBackHomeClick = navigateHome
             )
