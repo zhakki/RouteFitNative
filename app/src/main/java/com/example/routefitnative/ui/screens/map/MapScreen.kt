@@ -1,5 +1,6 @@
 package com.example.routefitnative.ui.screens.map
 
+import android.annotation.SuppressLint
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -190,6 +191,7 @@ fun MapScreen(
                         },
                         modifier = Modifier.fillMaxSize(),
                         fusedLocationClient = fusedLocationClient,
+                        permissionState = permissionState,
                         onLocationLoaded = { isMapLoading = false }
                     )
                     
@@ -327,6 +329,7 @@ private fun MapPreview(
     onStopRequested: (com.google.android.gms.maps.GoogleMap?) -> Unit,
     modifier: Modifier = Modifier,
     fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
+    permissionState: PermissionState,
     onLocationLoaded: () -> Unit
 ) {
     val cameraPositionState = rememberCameraPositionState {
@@ -344,18 +347,21 @@ private fun MapPreview(
         }
     }
 
+    @SuppressLint("MissingPermission")
     LaunchedEffect(Unit) {
         try {
-            val location = fusedLocationClient.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                null
-            ).await()
-            
-            if (location != null) {
-                cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                    LatLng(location.latitude, location.longitude), 
-                    DEFAULT_ZOOM
-                )
+            if (permissionState == PermissionState.GRANTED) {
+                val location = fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    null
+                ).await()
+                
+                if (location != null) {
+                    cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                        LatLng(location.latitude, location.longitude), 
+                        DEFAULT_ZOOM
+                    )
+                }
             }
         } catch (e: SecurityException) {
         } finally {
@@ -375,7 +381,9 @@ private fun MapPreview(
         GoogleMap(
             modifier = Modifier.matchParentSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = true),
+            properties = MapProperties(
+                isMyLocationEnabled = permissionState == PermissionState.GRANTED
+            ),
             uiSettings = MapUiSettings(
                 myLocationButtonEnabled = false,
                 zoomControlsEnabled = false,
@@ -425,10 +433,14 @@ private fun MapPreview(
                         } else {
                             // Fallback to current GPS location
                             try {
-                                fusedLocationClient.getCurrentLocation(
-                                    Priority.PRIORITY_HIGH_ACCURACY,
-                                    null
-                                ).await()?.let { LatLng(it.latitude, it.longitude) }
+                                if (permissionState == PermissionState.GRANTED) {
+                                    @SuppressLint("MissingPermission")
+                                    val loc = fusedLocationClient.getCurrentLocation(
+                                        Priority.PRIORITY_HIGH_ACCURACY,
+                                        null
+                                    ).await()
+                                    loc?.let { LatLng(it.latitude, it.longitude) }
+                                } else null
                             } catch (e: Exception) { null }
                         }
 
