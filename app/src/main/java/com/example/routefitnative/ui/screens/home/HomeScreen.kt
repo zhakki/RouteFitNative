@@ -640,7 +640,7 @@ private suspend fun loadDailySummaries(
         .await()
 
     return snapshot.documents.associate { document ->
-        val date = document.getString("date") ?: document.id
+        val date = document.getDateString("date") ?: document.id
 
         date to HomeDailySummary(
             date = date,
@@ -781,5 +781,17 @@ private fun formatDuration(durationSeconds: Long): String {
         val hours = totalMinutes / 60
         val minutes = totalMinutes % 60
         "${hours}h ${minutes}min"
+    }
+}
+private fun DocumentSnapshot.getDateString(fieldName: String): String? {
+    val value = get(fieldName)
+
+    return when (value) {
+        is String -> value
+        is Timestamp -> dateStringFromMillis(value.toDate().time)
+        is Long -> dateStringFromMillis(value)
+        is Int -> dateStringFromMillis(value.toLong())
+        is Double -> dateStringFromMillis(value.toLong())
+        else -> null
     }
 }
