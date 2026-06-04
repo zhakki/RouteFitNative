@@ -2,6 +2,7 @@ package com.example.routefitnative.ui.screens.result
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,7 +37,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +67,7 @@ fun ResultScreen(
     trackingViewModel: TrackingViewModel = viewModel()
 ) {
     val lastRoute by trackingViewModel.lastSavedRoute.collectAsState()
+    val routeSnapshot by trackingViewModel.routeSnapshot.collectAsState()
 
     // Formatters
     val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy • HH:mm")
@@ -137,7 +142,8 @@ fun ResultScreen(
 
             RoutePreviewCard(
                 modifier = Modifier.padding(top = 18.dp),
-                distanceKm = lastRoute?.distanceKm ?: 0.0
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                snapshot = routeSnapshot
             )
 
             StatsGrid(
@@ -156,7 +162,10 @@ fun ResultScreen(
             )
 
             Button(
-                onClick = onBackHomeClick,
+                onClick = {
+                    trackingViewModel.clearSnapshot()
+                    onBackHomeClick()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
@@ -265,7 +274,8 @@ private fun SummaryItem(label: String, value: String, modifier: Modifier = Modif
 @Composable
 private fun RoutePreviewCard(
     modifier: Modifier = Modifier,
-    distanceKm: Double
+    distanceKm: Double,
+    snapshot: android.graphics.Bitmap? = null
 ) {
     RouteFitResultCard(modifier = modifier) {
         Text(
@@ -284,8 +294,17 @@ private fun RoutePreviewCard(
                 .background(RouteFitSurfaceVariant)
                 .border(BorderStroke(1.dp, RouteFitOutline), RoundedCornerShape(22.dp))
         ) {
-            ResultMapBackground(modifier = Modifier.matchParentSize())
-            RoutePathPreview(modifier = Modifier.matchParentSize())
+            if (snapshot != null) {
+                Image(
+                    bitmap = snapshot.asImageBitmap(),
+                    contentDescription = "Raja eelvaade",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                ResultMapBackground(modifier = Modifier.matchParentSize())
+                RoutePathPreview(modifier = Modifier.matchParentSize())
+            }
 
             Surface(
                 modifier = Modifier

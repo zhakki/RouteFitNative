@@ -1,5 +1,6 @@
 package com.example.routefitnative.ui.screens.map
 
+import android.graphics.Bitmap
 import android.annotation.SuppressLint
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -176,7 +177,16 @@ fun MapScreen(
                                         val builder = LatLngBounds.builder()
                                         routePoints.forEach { builder.include(it) }
                                         map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
-                                        delay(600)
+                                        delay(1000) // Wait for animation to finish and tiles to load
+
+                                        // 1.5 Capture Snapshot
+                                        kotlinx.coroutines.suspendCancellableCoroutine<Bitmap?> { continuation ->
+                                            map.snapshot { bitmap ->
+                                                continuation.resume(bitmap) {}
+                                            }
+                                        }?.let { snapshot ->
+                                            trackingViewModel.setSnapshot(snapshot)
+                                        }
                                     }
                                 } catch (e: Exception) {}
 
@@ -472,6 +482,7 @@ private fun MapPreview(
             onStartClick = onStartClick,
             onPauseClick = onPauseClick,
             onStopClick = {
+                isFollowModeEnabled = false
                 onStopRequested(googleMap)
             },
             modifier = Modifier

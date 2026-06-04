@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.IBinder
 import androidx.core.content.ContextCompat
@@ -64,6 +65,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private val _lastSavedRoute = MutableStateFlow<RouteModel?>(null)
     val lastSavedRoute: StateFlow<RouteModel?> = _lastSavedRoute.asStateFlow()
+
+    private val _routeSnapshot = MutableStateFlow<Bitmap?>(null)
+    val routeSnapshot: StateFlow<Bitmap?> = _routeSnapshot.asStateFlow()
 
     private val _permissionState = MutableStateFlow(PermissionState.IDLE)
     val permissionState: StateFlow<PermissionState> = _permissionState.asStateFlow()
@@ -146,6 +150,14 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     fun dismissRationale() {
         _permissionState.value = PermissionState.NEEDS_BACKGROUND
+    }
+
+    fun setSnapshot(bitmap: Bitmap?) {
+        _routeSnapshot.value = bitmap
+    }
+
+    fun clearSnapshot() {
+        _routeSnapshot.value = null
     }
 
     private fun bindTrackingService() {
