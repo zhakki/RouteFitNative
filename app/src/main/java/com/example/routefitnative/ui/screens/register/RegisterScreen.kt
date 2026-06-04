@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
+import com.example.routefitnative.model.UserProfile
 import com.example.routefitnative.ui.components.RouteFitTextField
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
@@ -43,6 +47,7 @@ import com.example.routefitnative.ui.theme.RouteFitOutline
 import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(
@@ -56,6 +61,13 @@ fun RegisterScreen(
     var repeatPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var repeatPasswordVisible by remember { mutableStateOf(false) }
+
+    var registerError by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
 
     Box(
         modifier = modifier
@@ -93,19 +105,83 @@ fun RegisterScreen(
 
             RegisterCard(
                 name = name,
-                onNameChange = { name = it },
+                onNameChange = {
+                    name = it
+                    registerError = ""
+                },
                 email = email,
-                onEmailChange = { email = it },
+                onEmailChange = {
+                    email = it
+                    registerError = ""
+                },
                 password = password,
-                onPasswordChange = { password = it },
+                onPasswordChange = {
+                    password = it
+                    registerError = ""
+                },
                 repeatPassword = repeatPassword,
-                onRepeatPasswordChange = { repeatPassword = it },
+                onRepeatPasswordChange = {
+                    repeatPassword = it
+                    registerError = ""
+                },
                 passwordVisible = passwordVisible,
                 onPasswordVisibilityChange = { passwordVisible = !passwordVisible },
                 repeatPasswordVisible = repeatPasswordVisible,
                 onRepeatPasswordVisibilityChange = { repeatPasswordVisible = !repeatPasswordVisible },
-                onRegisterClick = onRegisterClick,
+                onRegisterClick = {
+                    if (!isLoading) {
+                        val cleanName = name.trim()
+                        val cleanEmail = email.trim()
+
+                        when {
+                            cleanName.isBlank() -> {
+                                registerError = "Sisesta nimi."
+                            }
+
+                            cleanEmail.isBlank() -> {
+                                registerError = "Sisesta e-post."
+                            }
+
+                            password.length < 6 -> {
+                                registerError = "Parool peab olema vähemalt 6 tähemärki."
+                            }
+
+                            password != repeatPassword -> {
+                                registerError = "Paroolid ei kattu."
+                            }
+
+                            else -> {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    registerError = ""
+
+                                    try {
+                                        val user = authRepository.register(
+                                            email = cleanEmail,
+                                            password = password
+                                        )
+
+                                        userRepository.createUserProfile(
+                                            UserProfile(
+                                                uid = user.uid,
+                                                email = user.email ?: cleanEmail,
+                                                fullName = cleanName
+                                            )
+                                        )
+
+                                        isLoading = false
+                                        onRegisterClick()
+                                    } catch (e: Exception) {
+                                        isLoading = false
+                                        registerError = e.message ?: "Registreerimine ebaõnnestus."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 onBackToLoginClick = onBackToLoginClick,
+                errorMessage = registerError,
                 modifier = Modifier.padding(top = 54.dp)
             )
         }
@@ -128,6 +204,7 @@ private fun RegisterCard(
     onRepeatPasswordVisibilityChange: () -> Unit,
     onRegisterClick: () -> Unit,
     onBackToLoginClick: () -> Unit,
+    errorMessage: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -220,6 +297,15 @@ private fun RegisterCard(
                     text = "Registreeru",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold
+                )
+            }
+
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier.padding(top = 14.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
 

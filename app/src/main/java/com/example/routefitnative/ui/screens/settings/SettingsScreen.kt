@@ -30,6 +30,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
+import com.example.routefitnative.model.UserSettings
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
 import com.example.routefitnative.ui.theme.RouteFitOnAccent
@@ -51,13 +60,53 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
-    onEditProfileClick: () -> Unit = {}
+    onEditProfileClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {}
 ) {
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
+    val coroutineScope = rememberCoroutineScope()
+
+    var settings by remember { mutableStateOf(UserSettings()) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    fun saveSettings(updatedSettings: UserSettings) {
+        val uid = authRepository.currentUser?.uid ?: return
+
+        settings = updatedSettings
+
+        coroutineScope.launch {
+            try {
+                userRepository.updateUserSettings(uid, updatedSettings)
+                errorMessage = ""
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Seadete salvestamine ebaõnnestus."
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val uid = authRepository.currentUser?.uid
+
+        if (uid == null) {
+            errorMessage = "Kasutaja pole sisse logitud."
+        } else {
+            try {
+                settings = userRepository.getUserSettings(uid)
+                errorMessage = ""
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Seadete laadimine ebaõnnestus."
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -91,6 +140,13 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 30.dp)
             )
             GoalsCard(
+                dailyStepGoal = settings.dailyStepGoal,
+                onDailyStepGoalChange = { newGoal ->
+                    settings = settings.copy(dailyStepGoal = newGoal)
+                },
+                onDailyStepGoalChangeFinished = {
+                    saveSettings(settings)
+                },
                 modifier = Modifier.padding(top = 14.dp)
             )
 
@@ -99,6 +155,18 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 26.dp)
             )
             RouteSettingsCard(
+                distanceUnit = settings.distanceUnit,
+                saveRoutes = settings.saveRoutes,
+                allowLocation = settings.allowLocation,
+                onDistanceUnitChange = { unit ->
+                    saveSettings(settings.copy(distanceUnit = unit))
+                },
+                onSaveRoutesChange = { checked ->
+                    saveSettings(settings.copy(saveRoutes = checked))
+                },
+                onAllowLocationChange = { checked ->
+                    saveSettings(settings.copy(allowLocation = checked))
+                },
                 modifier = Modifier.padding(top = 14.dp)
             )
 
@@ -119,8 +187,23 @@ fun SettingsScreen(
                 onEditProfileClick = onEditProfileClick
             )
 
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+
             Button(
-                onClick = {},
+                onClick = {
+                    authRepository.logout()
+                    onLogoutClick()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 28.dp)
@@ -178,7 +261,15 @@ private fun SettingsTopBar(onBackClick: () -> Unit) {
 }
 
 @Composable
-private fun GoalsCard(modifier: Modifier = Modifier) {
+private fun GoalsCard(
+    dailyStepGoal: Int,
+    onDailyStepGoalChange: (Int) -> Unit,
+    onDailyStepGoalChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val safeGoal = dailyStepGoal.coerceIn(5_000, 40_000)
+    val weeklyGoal = safeGoal * 7
+
     RouteFitSettingsCard(modifier = modifier) {
         Text(
             text = "Päevane sammueesmärk",
@@ -187,7 +278,7 @@ private fun GoalsCard(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.ExtraBold
         )
         Text(
-            text = "24 000",
+            text = formatSteps(safeGoal),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp),
@@ -201,9 +292,13 @@ private fun GoalsCard(modifier: Modifier = Modifier) {
         )
 
         Slider(
-            value = 24000f,
-            onValueChange = {},
+            value = safeGoal.toFloat(),
+            onValueChange = { value ->
+                onDailyStepGoalChange(roundToNearestThousand(value))
+            },
+            onValueChangeFinished = onDailyStepGoalChangeFinished,
             valueRange = 5_000f..40_000f,
+            steps = 34,
             modifier = Modifier.padding(top = 12.dp),
             colors = SliderDefaults.colors(
                 thumbColor = RouteFitAccent,
@@ -215,7 +310,7 @@ private fun GoalsCard(modifier: Modifier = Modifier) {
         )
 
         Text(
-            text = "Nädala eesmärk arvutatakse automaatselt: 168 000 sammu",
+            text = "Nädala eesmärk arvutatakse automaatselt: ${formatSteps(weeklyGoal)} sammu",
             modifier = Modifier.padding(top = 8.dp),
             color = RouteFitTextSecondary,
             style = MaterialTheme.typography.bodySmall
@@ -224,7 +319,15 @@ private fun GoalsCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun RouteSettingsCard(modifier: Modifier = Modifier) {
+private fun RouteSettingsCard(
+    distanceUnit: String,
+    saveRoutes: Boolean,
+    allowLocation: Boolean,
+    onDistanceUnitChange: (String) -> Unit,
+    onSaveRoutesChange: (Boolean) -> Unit,
+    onAllowLocationChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     RouteFitSettingsCard(modifier = modifier) {
         Text(
             text = "Vahemaaühik",
@@ -233,20 +336,36 @@ private fun RouteSettingsCard(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.ExtraBold
         )
         UnitSegmentedControl(
+            selectedUnit = distanceUnit,
+            onUnitChange = onDistanceUnitChange,
             modifier = Modifier.padding(top = 14.dp)
         )
 
         SettingsDivider()
-        SettingSwitchRow(title = "Salvesta marsruudid", checked = true)
+        SettingSwitchRow(
+            title = "Salvesta marsruudid",
+            checked = saveRoutes,
+            onCheckedChange = onSaveRoutesChange
+        )
         SettingsDivider()
-        SettingSwitchRow(title = "Kasuta asukohta", checked = true)
+        SettingSwitchRow(
+            title = "Kasuta asukohta",
+            checked = allowLocation,
+            onCheckedChange = onAllowLocationChange
+        )
     }
 }
 
 @Composable
 private fun AppSettingsCard(modifier: Modifier = Modifier) {
+    var notificationsEnabled by remember { mutableStateOf(true) }
+
     RouteFitSettingsCard(modifier = modifier) {
-        SettingSwitchRow(title = "Teavitused", checked = true)
+        SettingSwitchRow(
+            title = "Teavitused",
+            checked = notificationsEnabled,
+            onCheckedChange = { notificationsEnabled = it }
+        )
         SettingsDivider()
         Row(
             modifier = Modifier
@@ -315,7 +434,11 @@ private fun SettingsSectionTitle(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun UnitSegmentedControl(modifier: Modifier = Modifier) {
+private fun UnitSegmentedControl(
+    selectedUnit: String,
+    onUnitChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -328,12 +451,14 @@ private fun UnitSegmentedControl(modifier: Modifier = Modifier) {
     ) {
         SegmentOption(
             text = "km",
-            selected = true,
+            selected = selectedUnit == "km",
+            onClick = { onUnitChange("km") },
             modifier = Modifier.weight(1f)
         )
         SegmentOption(
             text = "mi",
-            selected = false,
+            selected = selectedUnit == "mi",
+            onClick = { onUnitChange("mi") },
             modifier = Modifier.weight(1f)
         )
     }
@@ -343,13 +468,15 @@ private fun UnitSegmentedControl(modifier: Modifier = Modifier) {
 private fun SegmentOption(
     text: String,
     selected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(24.dp))
-            .background(if (selected) RouteFitAccent else Color.Transparent),
+            .background(if (selected) RouteFitAccent else Color.Transparent)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -362,7 +489,11 @@ private fun SegmentOption(
 }
 
 @Composable
-private fun SettingSwitchRow(title: String, checked: Boolean) {
+private fun SettingSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -378,7 +509,7 @@ private fun SettingSwitchRow(title: String, checked: Boolean) {
         )
         Switch(
             checked = checked,
-            onCheckedChange = {},
+            onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = RouteFitOnAccent,
                 checkedTrackColor = RouteFitAccent,
@@ -510,4 +641,12 @@ private fun LanguageIcon(modifier: Modifier = Modifier, color: Color) {
             style = stroke
         )
     }
+}
+
+private fun roundToNearestThousand(value: Float): Int {
+    return ((value / 1000f).roundToInt() * 1000).coerceIn(5_000, 40_000)
+}
+
+private fun formatSteps(value: Int): String {
+    return "%,d".format(value).replace(",", " ")
 }

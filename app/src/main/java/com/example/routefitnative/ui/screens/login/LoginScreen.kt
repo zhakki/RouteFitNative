@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
 import com.example.routefitnative.ui.components.RouteFitPrimaryButton
 import com.example.routefitnative.ui.components.RouteFitSocialButton
 import com.example.routefitnative.ui.components.RouteFitTextField
@@ -44,6 +47,7 @@ import com.example.routefitnative.ui.theme.RouteFitOutline
 import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
@@ -54,6 +58,13 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+
+    var loginError by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
 
     Box(
         modifier = modifier
@@ -99,13 +110,51 @@ fun LoginScreen(
 
             LoginCard(
                 email = email,
-                onEmailChange = { email = it },
+                onEmailChange = {
+                    email = it
+                    loginError = ""
+                },
                 password = password,
-                onPasswordChange = { password = it },
+                onPasswordChange = {
+                    password = it
+                    loginError = ""
+                },
                 passwordVisible = passwordVisible,
                 onPasswordVisibilityChange = { passwordVisible = !passwordVisible },
-                onLoginClick = onLoginClick,
+                onLoginClick = {
+                    if (!isLoading) {
+                        val cleanEmail = email.trim()
+
+                        if (cleanEmail.isBlank() || password.isBlank()) {
+                            loginError = "Sisesta e-post ja parool."
+                        } else {
+                            coroutineScope.launch {
+                                isLoading = true
+                                loginError = ""
+
+                                try {
+                                    val user = authRepository.login(
+                                        email = cleanEmail,
+                                        password = password
+                                    )
+
+                                    userRepository.ensureUserProfileExists(
+                                        uid = user.uid,
+                                        email = user.email ?: cleanEmail
+                                    )
+
+                                    isLoading = false
+                                    onLoginClick()
+                                } catch (e: Exception) {
+                                    isLoading = false
+                                    loginError = e.message ?: "Sisselogimine ebaõnnestus."
+                                }
+                            }
+                        }
+                    }
+                },
                 onRegisterClick = onRegisterClick,
+                errorMessage = loginError,
                 modifier = Modifier.padding(top = 54.dp)
             )
         }
@@ -122,6 +171,7 @@ private fun LoginCard(
     onPasswordVisibilityChange: () -> Unit,
     onLoginClick: () -> Unit,
     onRegisterClick: () -> Unit,
+    errorMessage: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -194,6 +244,15 @@ private fun LoginCard(
                 onClick = onLoginClick,
                 modifier = Modifier.padding(top = 22.dp)
             )
+
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier.padding(top = 14.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             Row(
                 modifier = Modifier

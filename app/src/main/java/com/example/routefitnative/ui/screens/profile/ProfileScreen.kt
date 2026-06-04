@@ -27,6 +27,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -40,6 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
+import com.example.routefitnative.model.UserProfile
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
 import com.example.routefitnative.ui.theme.RouteFitAccent
@@ -58,6 +66,43 @@ fun ProfileScreen(
     onSettingsClick: () -> Unit = {},
     onEditProfileClick: () -> Unit = {}
 ) {
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
+
+    var profile by remember { mutableStateOf<UserProfile?>(null) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val currentUser = authRepository.currentUser
+
+        if (currentUser == null) {
+            errorMessage = "Kasutaja pole sisse logitud."
+        } else {
+            try {
+                userRepository.ensureUserProfileExists(
+                    uid = currentUser.uid,
+                    email = currentUser.email ?: ""
+                )
+
+                profile = userRepository.getUserProfile(currentUser.uid)
+                errorMessage = ""
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Profiili laadimine ebaõnnestus."
+            }
+        }
+    }
+
+    val currentEmail = profile?.email
+        ?.takeIf { it.isNotBlank() }
+        ?: authRepository.currentUser?.email
+        ?: "kasutaja@email.ee"
+
+    val displayName = profile?.fullName
+        ?.takeIf { it.isNotBlank() }
+        ?: "RouteFit kasutaja"
+
+    val initials = profileInitials(displayName, currentEmail)
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = RouteFitBackground,
@@ -130,6 +175,9 @@ fun ProfileScreen(
 
                 ProfileHeader(
                     modifier = Modifier.padding(top = 34.dp),
+                    initials = initials,
+                    fullName = displayName,
+                    email = currentEmail,
                     onEditProfileClick = onEditProfileClick
                 )
 
@@ -137,15 +185,28 @@ fun ProfileScreen(
                     text = "Isiklik info",
                     modifier = Modifier.padding(top = 28.dp)
                 )
+
                 InfoGrid(
                     items = listOf(
-                        "Vanus" to "28",
-                        "Kaal" to "78 kg",
-                        "Pikkus" to "182 cm",
-                        "Sugu" to "Mees"
+                        "Vanus" to formatAge(profile?.age ?: 0),
+                        "Kaal" to formatDoubleValue(profile?.weightKg ?: 0.0, "kg"),
+                        "Pikkus" to formatDoubleValue(profile?.heightCm ?: 0.0, "cm"),
+                        "Sugu" to formatGender(profile?.gender.orEmpty())
                     ),
                     modifier = Modifier.padding(top = 14.dp)
                 )
+
+                if (errorMessage.isNotBlank()) {
+                    Text(
+                        text = errorMessage,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        color = RouteFitAccent,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -154,6 +215,9 @@ fun ProfileScreen(
 @Composable
 private fun ProfileHeader(
     modifier: Modifier = Modifier,
+    initials: String,
+    fullName: String,
+    email: String,
     onEditProfileClick: () -> Unit = {}
 ) {
     RouteFitProfileCard(modifier = modifier) {
@@ -178,7 +242,7 @@ private fun ProfileHeader(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = "NK",
+                        text = initials,
                         color = RouteFitAccent,
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.ExtraBold
@@ -205,7 +269,7 @@ private fun ProfileHeader(
         }
 
         Text(
-            text = "Näidis kasutaja",
+            text = fullName,
             modifier = Modifier.fillMaxWidth(),
             color = RouteFitTextPrimary,
             style = MaterialTheme.typography.headlineLarge.copy(
@@ -215,6 +279,7 @@ private fun ProfileHeader(
             fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center
         )
+
         Text(
             text = "RouteFit kasutaja",
             modifier = Modifier
@@ -246,7 +311,7 @@ private fun ProfileHeader(
         }
 
         Text(
-            text = "kasutaja@email.ee",
+            text = email,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 18.dp),
@@ -405,5 +470,44 @@ private fun EditIcon(modifier: Modifier = Modifier, color: Color) {
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
+    }
+}
+
+private fun profileInitials(fullName: String, email: String): String {
+    val source = if (fullName.isNotBlank()) fullName else email.substringBefore("@")
+    val parts = source
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+
+    return when {
+        parts.size >= 2 -> "${parts[0].first()}${parts[1].first()}".uppercase()
+        parts.size == 1 -> parts[0].take(2).uppercase()
+        else -> "RF"
+    }
+}
+
+private fun formatAge(age: Int): String {
+    return if (age > 0) age.toString() else "—"
+}
+
+private fun formatDoubleValue(value: Double, unit: String): String {
+    if (value <= 0.0) return "—"
+
+    val numberText = if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        value.toString()
+    }
+
+    return "$numberText $unit"
+}
+
+private fun formatGender(gender: String): String {
+    return when (gender.trim().lowercase()) {
+        "female", "naine" -> "Naine"
+        "male", "mees" -> "Mees"
+        "" -> "—"
+        else -> gender
     }
 }

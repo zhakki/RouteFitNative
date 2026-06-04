@@ -27,8 +27,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +48,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.routefitnative.data.AuthRepository
+import com.example.routefitnative.data.UserRepository
+import com.example.routefitnative.model.UserProfile
 import com.example.routefitnative.ui.components.RouteFitTextField
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
@@ -55,6 +61,7 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import kotlinx.coroutines.launch
 
 @Composable
 fun EditProfileScreen(
@@ -63,11 +70,50 @@ fun EditProfileScreen(
     onSaveClick: () -> Unit = {},
     onCancelClick: () -> Unit = {}
 ) {
+    val authRepository = remember { AuthRepository() }
+    val userRepository = remember { UserRepository() }
+    val coroutineScope = rememberCoroutineScope()
+
+    var currentProfile by remember { mutableStateOf<UserProfile?>(null) }
+
     var name by rememberSaveable { mutableStateOf("") }
     var age by rememberSaveable { mutableStateOf("") }
     var weight by rememberSaveable { mutableStateOf("") }
     var height by rememberSaveable { mutableStateOf("") }
     var gender by rememberSaveable { mutableStateOf("Naine") }
+
+    var errorMessage by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val currentUser = authRepository.currentUser
+
+        if (currentUser == null) {
+            errorMessage = "Kasutaja pole sisse logitud."
+        } else {
+            try {
+                userRepository.ensureUserProfileExists(
+                    uid = currentUser.uid,
+                    email = currentUser.email ?: ""
+                )
+
+                val loadedProfile = userRepository.getUserProfile(currentUser.uid)
+                currentProfile = loadedProfile
+
+                if (loadedProfile != null) {
+                    name = loadedProfile.fullName
+                    age = if (loadedProfile.age > 0) loadedProfile.age.toString() else ""
+                    weight = formatInputNumber(loadedProfile.weightKg)
+                    height = formatInputNumber(loadedProfile.heightCm)
+                    gender = toUiGender(loadedProfile.gender)
+                }
+
+                errorMessage = ""
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Profiili laadimine ebaõnnestus."
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -118,13 +164,19 @@ fun EditProfileScreen(
                 RouteFitTextField(
                     label = "Nimi",
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = {
+                        name = it
+                        errorMessage = ""
+                    },
                     placeholder = "Sisesta nimi"
                 )
                 RouteFitTextField(
                     label = "Vanus",
                     value = age,
-                    onValueChange = { age = it },
+                    onValueChange = {
+                        age = it
+                        errorMessage = ""
+                    },
                     placeholder = "Sisesta vanus",
                     modifier = Modifier.padding(top = 18.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -132,7 +184,10 @@ fun EditProfileScreen(
                 RouteFitTextField(
                     label = "Kaal (kg)",
                     value = weight,
-                    onValueChange = { weight = it },
+                    onValueChange = {
+                        weight = it
+                        errorMessage = ""
+                    },
                     placeholder = "Sisesta kaal",
                     modifier = Modifier.padding(top = 18.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -140,20 +195,69 @@ fun EditProfileScreen(
                 RouteFitTextField(
                     label = "Pikkus (cm)",
                     value = height,
-                    onValueChange = { height = it },
+                    onValueChange = {
+                        height = it
+                        errorMessage = ""
+                    },
                     placeholder = "Sisesta pikkus",
                     modifier = Modifier.padding(top = 18.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 GenderDropdown(
                     selectedGender = gender,
-                    onGenderChange = { gender = it },
+                    onGenderChange = {
+                        gender = it
+                        errorMessage = ""
+                    },
                     modifier = Modifier.padding(top = 18.dp)
                 )
             }
 
             Button(
-                onClick = onSaveClick,
+                onClick = {
+                    if (!isSaving) {
+                        coroutineScope.launch {
+                            val currentUser = authRepository.currentUser
+
+                            if (currentUser == null) {
+                                errorMessage = "Kasutaja pole sisse logitud."
+                                return@launch
+                            }
+
+                            isSaving = true
+                            errorMessage = ""
+
+                            try {
+                                val oldProfile = currentProfile
+
+                                val updatedProfile = UserProfile(
+                                    uid = currentUser.uid,
+                                    email = oldProfile?.email
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: currentUser.email
+                                        ?: "",
+                                    fullName = name.trim(),
+                                    age = age.trim().toIntOrNull() ?: 0,
+                                    weightKg = parseDoubleInput(weight),
+                                    heightCm = parseDoubleInput(height),
+                                    gender = gender,
+                                    createdAt = oldProfile?.createdAt ?: System.currentTimeMillis(),
+                                    updatedAt = System.currentTimeMillis()
+                                )
+
+                                userRepository.updateUserProfile(updatedProfile)
+
+                                currentProfile = updatedProfile
+                                isSaving = false
+
+                                onSaveClick()
+                            } catch (e: Exception) {
+                                isSaving = false
+                                errorMessage = e.message ?: "Profiili salvestamine ebaõnnestus."
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 28.dp)
@@ -169,6 +273,18 @@ fun EditProfileScreen(
                     text = "Salvesta",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold
+                )
+            }
+
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
                 )
             }
 
@@ -371,5 +487,31 @@ private fun DownArrowIcon(modifier: Modifier = Modifier, color: Color) {
             strokeWidth = stroke.width,
             cap = StrokeCap.Round
         )
+    }
+}
+
+private fun parseDoubleInput(value: String): Double {
+    return value
+        .trim()
+        .replace(",", ".")
+        .toDoubleOrNull()
+        ?: 0.0
+}
+
+private fun formatInputNumber(value: Double): String {
+    if (value <= 0.0) return ""
+
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        value.toString()
+    }
+}
+
+private fun toUiGender(gender: String): String {
+    return when (gender.trim().lowercase()) {
+        "female", "naine" -> "Naine"
+        "male", "mees" -> "Mees"
+        else -> "Naine"
     }
 }
