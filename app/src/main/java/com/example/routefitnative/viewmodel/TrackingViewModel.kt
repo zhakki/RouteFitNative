@@ -45,6 +45,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     private val _routePoints = MutableStateFlow<List<LatLng>>(emptyList())
     val routePoints: StateFlow<List<LatLng>> = _routePoints.asStateFlow()
 
+    private val _currentLocation = MutableStateFlow<android.location.Location?>(null)
+    val currentLocation: StateFlow<android.location.Location?> = _currentLocation.asStateFlow()
+
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
 
@@ -80,6 +83,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
             viewModelScope.launch {
                 trackingService?.routePoints?.collect { _routePoints.value = it }
+            }
+            viewModelScope.launch {
+                trackingService?.currentLocation?.collect { _currentLocation.value = it }
             }
             viewModelScope.launch {
                 trackingService?.isTracking?.collect { _isTracking.value = it }

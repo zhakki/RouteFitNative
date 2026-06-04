@@ -57,6 +57,7 @@ fun MapScreen(
     trackingViewModel: TrackingViewModel = viewModel()
 ) {
     val routePoints by trackingViewModel.routePoints.collectAsState()
+    val currentLocation by trackingViewModel.currentLocation.collectAsState()
     val isTracking by trackingViewModel.isTracking.collectAsState()
     val isPaused by trackingViewModel.isPaused.collectAsState()
     val duration by trackingViewModel.duration.collectAsState()
@@ -157,6 +158,7 @@ fun MapScreen(
                 Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
                     MapPreview(
                         routePoints = routePoints,
+                        currentLocation = currentLocation,
                         isTracking = isTracking,
                         isPaused = isPaused,
                         onStartClick = { 
@@ -332,6 +334,7 @@ private fun MapStatCard(
 @Composable
 private fun MapPreview(
     routePoints: List<LatLng>,
+    currentLocation: android.location.Location?,
     isTracking: Boolean,
     isPaused: Boolean,
     onStartClick: () -> Unit,
@@ -357,33 +360,18 @@ private fun MapPreview(
         }
     }
 
-    @SuppressLint("MissingPermission")
-    LaunchedEffect(Unit) {
-        try {
-            if (permissionState == PermissionState.GRANTED) {
-                val location = fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    null
-                ).await()
-                
-                if (location != null) {
-                    cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                        LatLng(location.latitude, location.longitude), 
+    // Tsentreerime kohe, kui esimene asukoht saabub või muutub ja follow on sees
+    LaunchedEffect(currentLocation, isFollowModeEnabled) {
+        if (isFollowModeEnabled) {
+            currentLocation?.let { loc ->
+                cameraPositionState.animate(
+                    update = CameraUpdateFactory.newLatLngZoom(
+                        LatLng(loc.latitude, loc.longitude), 
                         DEFAULT_ZOOM
                     )
-                }
+                )
+                onLocationLoaded() // Peidame loading indikaatori
             }
-        } catch (e: SecurityException) {
-        } finally {
-            onLocationLoaded()
-        }
-    }
-
-    LaunchedEffect(routePoints, isFollowModeEnabled) {
-        if (isFollowModeEnabled && routePoints.isNotEmpty() && !isPaused && isTracking) {
-            cameraPositionState.animate(
-                update = CameraUpdateFactory.newLatLngZoom(routePoints.last(), DEFAULT_ZOOM)
-            )
         }
     }
 
@@ -437,26 +425,12 @@ private fun MapPreview(
                 .clickable {
                     isFollowModeEnabled = true
                     scope.launch {
-                        // Try to center on the last route point first, if available
-                        val targetLatLng = if (routePoints.isNotEmpty()) {
-                            routePoints.last()
-                        } else {
-                            // Fallback to current GPS location
-                            try {
-                                if (permissionState == PermissionState.GRANTED) {
-                                    @SuppressLint("MissingPermission")
-                                    val loc = fusedLocationClient.getCurrentLocation(
-                                        Priority.PRIORITY_HIGH_ACCURACY,
-                                        null
-                                    ).await()
-                                    loc?.let { LatLng(it.latitude, it.longitude) }
-                                } else null
-                            } catch (e: Exception) { null }
-                        }
-
-                        targetLatLng?.let {
+                        currentLocation?.let { loc ->
                             cameraPositionState.animate(
-                                update = CameraUpdateFactory.newLatLngZoom(it, DEFAULT_ZOOM)
+                                update = CameraUpdateFactory.newLatLngZoom(
+                                    LatLng(loc.latitude, loc.longitude), 
+                                    DEFAULT_ZOOM
+                                )
                             )
                         }
                     }

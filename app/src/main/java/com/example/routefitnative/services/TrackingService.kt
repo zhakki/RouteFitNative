@@ -42,6 +42,9 @@ class TrackingService : Service() {
     private val _routePoints = MutableStateFlow<List<LatLng>>(emptyList())
     val routePoints: StateFlow<List<LatLng>> = _routePoints
 
+    private val _currentLocation = MutableStateFlow<Location?>(null)
+    val currentLocation: StateFlow<Location?> = _currentLocation
+
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking
 
@@ -90,13 +93,17 @@ class TrackingService : Service() {
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                if (_isTracking.value && !_isPaused.value) {
-                    locationResult.lastLocation?.let { location ->
+                locationResult.lastLocation?.let { location ->
+                    _currentLocation.value = location
+                    if (_isTracking.value && !_isPaused.value) {
                         addPoint(location)
                     }
                 }
             }
         }
+        
+        // Start updates immediately for UI centering
+        requestLocationUpdates()
     }
 
     private suspend fun captureCurrentLocation(timeoutMs: Long? = null): Location? {
@@ -145,7 +152,10 @@ class TrackingService : Service() {
 
         // Ootame kriitilist esimest punkti
         val location = captureCurrentLocation()
-        location?.let { addPoint(it, calculateDistance = false) }
+        location?.let { 
+            _currentLocation.value = it
+            addPoint(it, calculateDistance = false) 
+        }
 
         _isTracking.value = true
         _isPaused.value = false
