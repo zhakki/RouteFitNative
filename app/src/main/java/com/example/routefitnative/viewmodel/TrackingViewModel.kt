@@ -1,10 +1,13 @@
 package com.example.routefitnative.viewmodel
 
+import android.Manifest
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -20,6 +23,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+enum class PermissionState {
+    IDLE,
+    NEEDS_FOREGROUND,
+    NEEDS_BACKGROUND_RATIONALE,
+    NEEDS_BACKGROUND,
+    GRANTED,
+    DENIED
+}
 
 class TrackingViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -49,6 +61,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    private val _permissionState = MutableStateFlow(PermissionState.IDLE)
+    val permissionState: StateFlow<PermissionState> = _permissionState.asStateFlow()
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -84,6 +99,50 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     init {
         bindTrackingService()
+        checkPermissions()
+    }
+
+    fun checkPermissions() {
+        val context = getApplication<Application>()
+        val hasForeground = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+        _permissionState.value = when {
+            hasForeground && hasBackground -> PermissionState.GRANTED
+            hasForeground && !hasBackground -> PermissionState.NEEDS_BACKGROUND_RATIONALE
+            else -> PermissionState.NEEDS_FOREGROUND
+        }
+    }
+
+    fun onForegroundPermissionResult(granted: Boolean) {
+        if (granted) {
+            checkPermissions()
+        } else {
+            _permissionState.value = PermissionState.DENIED
+        }
+    }
+
+    fun onBackgroundPermissionResult(granted: Boolean) {
+        if (granted) {
+            _permissionState.value = PermissionState.GRANTED
+        } else {
+            // Background permission is optional but recommended
+            // We can still track in foreground, but we warn the user
+            _permissionState.value = PermissionState.GRANTED 
+        }
+    }
+
+    fun dismissRationale() {
+        _permissionState.value = PermissionState.NEEDS_BACKGROUND
     }
 
     private fun bindTrackingService() {

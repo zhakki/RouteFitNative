@@ -1,5 +1,8 @@
 package com.example.routefitnative.ui.screens.map
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -28,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.components.BottomNavigationBar
 import com.example.routefitnative.ui.theme.*
+import com.example.routefitnative.viewmodel.PermissionState
 import com.example.routefitnative.viewmodel.TrackingViewModel
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -56,12 +60,45 @@ fun MapScreen(
     val duration by trackingViewModel.duration.collectAsState()
     val totalDistance by trackingViewModel.totalDistance.collectAsState()
     val isSaving by trackingViewModel.isSaving.collectAsState()
+    val permissionState by trackingViewModel.permissionState.collectAsState()
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     
     var isMapLoading by remember { mutableStateOf(true) }
+
+    // Permission Launchers
+    val foregroundPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.all { it }
+        trackingViewModel.onForegroundPermissionResult(granted)
+    }
+
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        trackingViewModel.onBackgroundPermissionResult(granted)
+    }
+
+    // Handle permission state changes
+    LaunchedEffect(permissionState) {
+        when (permissionState) {
+            PermissionState.NEEDS_FOREGROUND -> {
+                foregroundPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+            PermissionState.NEEDS_BACKGROUND -> {
+                backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+            else -> {}
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -120,7 +157,13 @@ fun MapScreen(
                         routePoints = routePoints,
                         isTracking = isTracking,
                         isPaused = isPaused,
-                        onStartClick = { trackingViewModel.startTracking() },
+                        onStartClick = { 
+                            if (permissionState == PermissionState.GRANTED) {
+                                trackingViewModel.startTracking()
+                            } else {
+                                trackingViewModel.checkPermissions()
+                            }
+                        },
                         onPauseClick = { 
                             if (isPaused) trackingViewModel.resumeTracking() else trackingViewModel.pauseTracking()
                         },
@@ -180,6 +223,40 @@ fun MapScreen(
                         )
                     }
                 }
+            }
+
+            // Background Permission Rationale Dialog
+            if (permissionState == PermissionState.NEEDS_BACKGROUND_RATIONALE) {
+                AlertDialog(
+                    onDismissRequest = { trackingViewModel.dismissRationale() },
+                    title = { Text("Tausta asukoha kasutus") },
+                    text = {
+                        Column {
+                            Text(
+                                "RouteFit vajab asukoha luba ka taustal, et sinu teekonda täpselt jälgida, kui telefon on taskus või ekraan kinni.",
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                            Text(
+                                "Kuidas lubada:",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("1. Vali avanevas aknas 'Seaded'")
+                            Text("2. Vali Load -> Asukoht")
+                            Text("3. Vali 'Luba alati'")
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { trackingViewModel.dismissRationale() },
+                            colors = ButtonDefaults.buttonColors(containerColor = RouteFitAccent)
+                        ) {
+                            Text("Sain aru")
+                        }
+                    },
+                    containerColor = RouteFitSurface,
+                    titleContentColor = RouteFitTextPrimary,
+                    textContentColor = RouteFitTextSecondary
+                )
             }
         }
     }
