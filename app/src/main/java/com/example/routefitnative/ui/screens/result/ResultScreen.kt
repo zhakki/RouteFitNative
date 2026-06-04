@@ -24,6 +24,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +52,15 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ResultScreen(
@@ -54,6 +68,32 @@ fun ResultScreen(
     onBackClick: () -> Unit = {},
     onBackHomeClick: () -> Unit = {}
 ) {
+    val auth = remember { FirebaseAuth.getInstance() }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    var route by remember { mutableStateOf<ResultRouteSummary?>(null) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            errorMessage = "Kasutaja pole sisse logitud."
+            return@LaunchedEffect
+        }
+
+        try {
+            route = loadLastSavedRoute(db, currentUser.uid)
+            errorMessage = ""
+
+            if (route == null) {
+                errorMessage = "Viimast marsruuti ei leitud."
+            }
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Marsruudi laadimine ebaõnnestus."
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -107,7 +147,7 @@ fun ResultScreen(
             )
 
             Text(
-                text = "02.06.2026 • 08:27",
+                text = route?.let { formatFullDate(it.endTime) } ?: "Andmeid laaditakse...",
                 modifier = Modifier.padding(top = 8.dp),
                 color = RouteFitTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
@@ -115,20 +155,36 @@ fun ResultScreen(
             )
 
             QuickSummary(
+                route = route,
                 modifier = Modifier.padding(top = 24.dp)
             )
 
             RoutePreviewCard(
+                route = route,
                 modifier = Modifier.padding(top = 18.dp)
             )
 
             StatsGrid(
+                route = route,
                 modifier = Modifier.padding(top = 18.dp)
             )
 
             SavedInfoCard(
+                routeFound = route != null,
                 modifier = Modifier.padding(top = 18.dp)
             )
+
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
 
             Button(
                 onClick = onBackHomeClick,
@@ -192,7 +248,10 @@ private fun ResultTopBar(onBackClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickSummary(modifier: Modifier = Modifier) {
+private fun QuickSummary(
+    route: ResultRouteSummary?,
+    modifier: Modifier = Modifier
+) {
     RouteFitResultCard(
         modifier = modifier,
         contentPadding = 18.dp
@@ -201,9 +260,21 @@ private fun QuickSummary(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            SummaryItem(label = "Vahemaa", value = "3.8 km", modifier = Modifier.weight(1f))
-            SummaryItem(label = "Kestus", value = "38 min", modifier = Modifier.weight(1f))
-            SummaryItem(label = "Sammud", value = "3 689", modifier = Modifier.weight(1f))
+            SummaryItem(
+                label = "Vahemaa",
+                value = formatDistance(route?.distanceKm ?: 0.0),
+                modifier = Modifier.weight(1f)
+            )
+            SummaryItem(
+                label = "Kestus",
+                value = formatDuration(route?.durationSeconds ?: 0),
+                modifier = Modifier.weight(1f)
+            )
+            SummaryItem(
+                label = "Sammud",
+                value = formatSteps(route?.steps ?: 0),
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -233,7 +304,10 @@ private fun SummaryItem(label: String, value: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun RoutePreviewCard(modifier: Modifier = Modifier) {
+private fun RoutePreviewCard(
+    route: ResultRouteSummary?,
+    modifier: Modifier = Modifier
+) {
     RouteFitResultCard(modifier = modifier) {
         Text(
             text = "Marsruudi eelvaade",
@@ -263,7 +337,7 @@ private fun RoutePreviewCard(modifier: Modifier = Modifier) {
                 border = BorderStroke(1.dp, RouteFitOutline)
             ) {
                 Text(
-                    text = "3.8 km",
+                    text = formatDistance(route?.distanceKm ?: 0.0),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     color = RouteFitAccent,
                     style = MaterialTheme.typography.bodySmall,
@@ -275,14 +349,20 @@ private fun RoutePreviewCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatsGrid(modifier: Modifier = Modifier) {
+private fun StatsGrid(
+    route: ResultRouteSummary?,
+    modifier: Modifier = Modifier
+) {
     val stats = listOf(
-        "Vahemaa" to "3.8 km",
-        "Kestus" to "38 min",
-        "Sammud" to "3 689",
-        "Kalorid" to "195 kcal",
-        "Keskmine kiirus" to "6.0 km/h",
-        "Algus/Lõpp aeg" to "08:27 / 09:05"
+        "Vahemaa" to formatDistance(route?.distanceKm ?: 0.0),
+        "Kestus" to formatDuration(route?.durationSeconds ?: 0),
+        "Sammud" to formatSteps(route?.steps ?: 0),
+        "Kalorid" to "${formatSteps(route?.calories ?: 0)} kcal",
+        "Keskmine kiirus" to formatSpeed(route?.averageSpeed ?: 0.0),
+        "Algus/Lõpp aeg" to formatTimeRange(
+            route?.startTime ?: 0L,
+            route?.endTime ?: 0L
+        )
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -333,7 +413,10 @@ private fun StatTile(
 }
 
 @Composable
-private fun SavedInfoCard(modifier: Modifier = Modifier) {
+private fun SavedInfoCard(
+    routeFound: Boolean,
+    modifier: Modifier = Modifier
+) {
     RouteFitResultCard(
         modifier = modifier,
         contentPadding = 20.dp
@@ -356,7 +439,11 @@ private fun SavedInfoCard(modifier: Modifier = Modifier) {
                 }
             }
             Text(
-                text = "Marsruut on salvestatud ajalukku",
+                text = if (routeFound) {
+                    "Marsruut on salvestatud ajalukku"
+                } else {
+                    "Marsruudi andmeid laaditakse"
+                },
                 modifier = Modifier.padding(start = 14.dp),
                 color = RouteFitTextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
@@ -533,4 +620,123 @@ private fun CheckIcon(modifier: Modifier = Modifier, color: Color) {
             cap = StrokeCap.Round
         )
     }
+}
+
+private data class ResultRouteSummary(
+    val title: String,
+    val startTime: Long,
+    val endTime: Long,
+    val distanceKm: Double,
+    val durationSeconds: Int,
+    val steps: Int,
+    val calories: Int,
+    val averageSpeed: Double
+)
+
+private suspend fun loadLastSavedRoute(
+    db: FirebaseFirestore,
+    uid: String
+): ResultRouteSummary? {
+    val snapshot = db.collection("users")
+        .document(uid)
+        .collection("routes")
+        .orderBy("createdAt", Query.Direction.DESCENDING)
+        .limit(1)
+        .get()
+        .await()
+
+    val document = snapshot.documents.firstOrNull() ?: return null
+
+    return document.toResultRouteSummary()
+}
+
+private fun DocumentSnapshot.toResultRouteSummary(): ResultRouteSummary {
+    return ResultRouteSummary(
+        title = getString("title") ?: "Marsruut",
+        startTime = getTimeMillis("startTime")
+            ?: getTimeMillis("createdAt")
+            ?: System.currentTimeMillis(),
+        endTime = getTimeMillis("endTime")
+            ?: getTimeMillis("createdAt")
+            ?: System.currentTimeMillis(),
+        distanceKm = getNumberDouble("distanceKm"),
+        durationSeconds = getNumberInt("durationSeconds"),
+        steps = getNumberInt("steps"),
+        calories = getNumberInt("calories"),
+        averageSpeed = getNumberDouble("averageSpeed")
+    )
+}
+
+private fun DocumentSnapshot.getNumberInt(fieldName: String): Int {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toInt()
+        else -> 0
+    }
+}
+
+private fun DocumentSnapshot.getNumberDouble(fieldName: String): Double {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Number -> value.toDouble()
+        else -> 0.0
+    }
+}
+
+private fun DocumentSnapshot.getTimeMillis(fieldName: String): Long? {
+    val value = get(fieldName)
+
+    return when (value) {
+        is Timestamp -> value.toDate().time
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        else -> null
+    }
+}
+
+private fun formatFullDate(timeMillis: Long): String {
+    return SimpleDateFormat("dd.MM.yyyy • HH:mm", Locale.US).format(Date(timeMillis))
+}
+
+private fun formatTimeRange(startTime: Long, endTime: Long): String {
+    if (startTime <= 0L || endTime <= 0L) {
+        return "—"
+    }
+
+    val formatter = SimpleDateFormat("HH:mm", Locale.US)
+
+    return "${formatter.format(Date(startTime))} / ${formatter.format(Date(endTime))}"
+}
+
+private fun formatSteps(value: Int): String {
+    return String.format(Locale.US, "%,d", value).replace(",", " ")
+}
+
+private fun formatDistance(distanceKm: Double): String {
+    return "${formatOneDecimal(distanceKm)} km"
+}
+
+private fun formatOneDecimal(value: Double): String {
+    return String.format(Locale.US, "%.1f", value)
+}
+
+private fun formatDuration(durationSeconds: Int): String {
+    val safeSeconds = durationSeconds.coerceAtLeast(0)
+
+    return when {
+        safeSeconds < 60 -> "$safeSeconds s"
+        safeSeconds < 3600 -> "${safeSeconds / 60} min"
+        else -> {
+            val hours = safeSeconds / 3600
+            val minutes = (safeSeconds % 3600) / 60
+            "${hours}h ${minutes}min"
+        }
+    }
+}
+
+private fun formatSpeed(speedKmh: Double): String {
+    return "${formatOneDecimal(speedKmh)} km/h"
 }

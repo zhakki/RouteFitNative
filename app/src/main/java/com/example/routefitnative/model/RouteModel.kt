@@ -12,5 +12,11 @@ data class RouteModel(
     val calories: Int = 0,
     val averageSpeed: Double = 0.0,
     val activityType: String = "walking",
+    val routePoints: List<RoutePoint> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
+)
+
+data class RoutePoint(
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
 )
