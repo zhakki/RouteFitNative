@@ -91,6 +91,15 @@ class TrackingService : Service() {
         stepSensor = StepSensor(this)
         createNotificationChannel()
 
+        // Üks püsiv korutiin sammude kogumiseks kogu teenuse eluea vältel
+        serviceScope.launch {
+            stepSensor.steps.collect { currentSteps ->
+                if (_isTracking.value) {
+                    _steps.value = currentSteps
+                }
+            }
+        }
+
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let { location ->
@@ -141,8 +150,12 @@ class TrackingService : Service() {
 
     suspend fun startTracking() {
         if (_isTracking.value) return
+        _isTracking.value = true // Märgime kohe aktiivseks
 
-        // Alustame kohe foreground teenust teavitusega
+        // 1. Käivitame sammude lugemise kohe
+        stepSensor.startCounting()
+
+        // 2. Alustame foreground teenust
         startForeground(NOTIFICATION_ID, createNotification("Otsitakse GPS signaali..."))
 
         _routePoints.value = emptyList()
@@ -150,14 +163,13 @@ class TrackingService : Service() {
         _steps.value = 0
         _duration.value = java.time.Duration.ZERO
 
-        // Ootame kriitilist esimest punkti
+        // 3. Ootame kriitilist esimest punkti
         val location = captureCurrentLocation()
         location?.let { 
             _currentLocation.value = it
             addPoint(it, calculateDistance = false) 
         }
 
-        _isTracking.value = true
         _isPaused.value = false
 
         timerJob?.cancel()
@@ -170,13 +182,6 @@ class TrackingService : Service() {
             }
         }
 
-        serviceScope.launch {
-            stepSensor.steps.collect {
-                _steps.value = it
-            }
-        }
-        stepSensor.startCounting()
-
         updateNotification("RouteFit jälgib teekonda")
         requestLocationUpdates()
     }
@@ -184,24 +189,28 @@ class TrackingService : Service() {
     suspend fun pauseTracking() {
         if (!_isTracking.value || _isPaused.value) return
         
-        // Lisame pausipunkti (2s timeout)
+        // Peatame sammud ja märgime pausi kohe
+        _isPaused.value = true
+        stepSensor.pauseCounting()
+        
+        // Üritame saada täpse punkti pausi hetkel
         val location = captureCurrentLocation(2000L)
         location?.let { addPoint(it, calculateDistance = true) }
 
-        _isPaused.value = true
-        stepSensor.pauseCounting()
         updateNotification("Jälgimine peatatud")
     }
 
     suspend fun resumeTracking() {
         if (!_isTracking.value || !_isPaused.value) return
         
-        // Ootame jätkamise punkti (kriitiline)
+        // Jätkame sammude lugemist ja märgime pausi lõppenuks kohe
+        _isPaused.value = false
+        stepSensor.resumeCounting()
+        
+        // Ootame jätkamise punkti
         val location = captureCurrentLocation()
         location?.let { addPoint(it, calculateDistance = false) }
 
-        _isPaused.value = false
-        stepSensor.resumeCounting()
         updateNotification("RouteFit jälgib teekonda")
     }
 
