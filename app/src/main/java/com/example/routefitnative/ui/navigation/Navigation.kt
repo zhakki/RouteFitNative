@@ -5,6 +5,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.routefitnative.viewmodel.TrackingViewModel
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.screens.history.HistoryScreen
 import com.example.routefitnative.ui.screens.home.HomeScreen
@@ -35,6 +37,8 @@ object RouteFitRoutes {
 @Composable
 fun RouteFitNavigation() {
     val navController = rememberNavController()
+    // Shared ViewModel for tracking and results
+    val trackingViewModel: TrackingViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -87,7 +91,8 @@ fun RouteFitNavigation() {
                 },
                 onStopClick = {
                     navController.navigate(RouteFitRoutes.RESULT)
-                }
+                },
+                trackingViewModel = trackingViewModel
             )
         }
         composable(RouteFitRoutes.HISTORY) {
@@ -163,7 +168,8 @@ fun RouteFitNavigation() {
 
             ResultScreen(
                 onBackClick = navigateHome,
-                onBackHomeClick = navigateHome
+                onBackHomeClick = navigateHome,
+                trackingViewModel = trackingViewModel
             )
         }
         composable(RouteFitRoutes.ROUTE_DETAIL) {

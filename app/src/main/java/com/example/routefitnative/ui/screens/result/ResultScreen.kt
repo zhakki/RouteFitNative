@@ -24,6 +24,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.routefitnative.ui.theme.RouteFitAccent
 import com.example.routefitnative.ui.theme.RouteFitBackground
 import com.example.routefitnative.ui.theme.RouteFitOnAccent
@@ -47,13 +50,24 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.example.routefitnative.viewmodel.TrackingViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ResultScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
-    onBackHomeClick: () -> Unit = {}
+    onBackHomeClick: () -> Unit = {},
+    trackingViewModel: TrackingViewModel = viewModel()
 ) {
+    val lastRoute by trackingViewModel.lastSavedRoute.collectAsState()
+
+    // Formatters
+    val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy • HH:mm")
+        .withZone(ZoneId.systemDefault())
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -93,7 +107,7 @@ fun ResultScreen(
             )
 
             Text(
-                text = "Treening lõpetatud",
+                text = lastRoute?.title ?: "Treening lõpetatud",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
@@ -107,7 +121,7 @@ fun ResultScreen(
             )
 
             Text(
-                text = "02.06.2026 • 08:27",
+                text = lastRoute?.let { dateFormatter.format(Instant.ofEpochMilli(it.endTime)) } ?: "--.--.---- • --:--",
                 modifier = Modifier.padding(top = 8.dp),
                 color = RouteFitTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
@@ -115,15 +129,26 @@ fun ResultScreen(
             )
 
             QuickSummary(
-                modifier = Modifier.padding(top = 24.dp)
+                modifier = Modifier.padding(top = 24.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                durationSeconds = lastRoute?.durationSeconds ?: 0,
+                steps = lastRoute?.steps ?: 0
             )
 
             RoutePreviewCard(
-                modifier = Modifier.padding(top = 18.dp)
+                modifier = Modifier.padding(top = 18.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0
             )
 
             StatsGrid(
-                modifier = Modifier.padding(top = 18.dp)
+                modifier = Modifier.padding(top = 18.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                durationSeconds = lastRoute?.durationSeconds ?: 0,
+                steps = lastRoute?.steps ?: 0,
+                calories = lastRoute?.calories ?: 0,
+                averageSpeed = lastRoute?.averageSpeed ?: 0.0,
+                startTime = lastRoute?.startTime ?: 0L,
+                endTime = lastRoute?.endTime ?: 0L
             )
 
             SavedInfoCard(
@@ -192,7 +217,12 @@ private fun ResultTopBar(onBackClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickSummary(modifier: Modifier = Modifier) {
+private fun QuickSummary(
+    modifier: Modifier = Modifier,
+    distanceKm: Double,
+    durationSeconds: Int,
+    steps: Int
+) {
     RouteFitResultCard(
         modifier = modifier,
         contentPadding = 18.dp
@@ -201,9 +231,9 @@ private fun QuickSummary(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            SummaryItem(label = "Vahemaa", value = "3.8 km", modifier = Modifier.weight(1f))
-            SummaryItem(label = "Kestus", value = "38 min", modifier = Modifier.weight(1f))
-            SummaryItem(label = "Sammud", value = "3 689", modifier = Modifier.weight(1f))
+            SummaryItem(label = "Vahemaa", value = "%.1f km".format(distanceKm), modifier = Modifier.weight(1f))
+            SummaryItem(label = "Kestus", value = "%d min".format(durationSeconds / 60), modifier = Modifier.weight(1f))
+            SummaryItem(label = "Sammud", value = steps.toString(), modifier = Modifier.weight(1f))
         }
     }
 }
@@ -233,7 +263,10 @@ private fun SummaryItem(label: String, value: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun RoutePreviewCard(modifier: Modifier = Modifier) {
+private fun RoutePreviewCard(
+    modifier: Modifier = Modifier,
+    distanceKm: Double
+) {
     RouteFitResultCard(modifier = modifier) {
         Text(
             text = "Marsruudi eelvaade",
@@ -263,7 +296,7 @@ private fun RoutePreviewCard(modifier: Modifier = Modifier) {
                 border = BorderStroke(1.dp, RouteFitOutline)
             ) {
                 Text(
-                    text = "3.8 km",
+                    text = "%.1f km".format(distanceKm),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     color = RouteFitAccent,
                     style = MaterialTheme.typography.bodySmall,
@@ -275,14 +308,26 @@ private fun RoutePreviewCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatsGrid(modifier: Modifier = Modifier) {
+private fun StatsGrid(
+    modifier: Modifier = Modifier,
+    distanceKm: Double,
+    durationSeconds: Int,
+    steps: Int,
+    calories: Int,
+    averageSpeed: Double,
+    startTime: Long,
+    endTime: Long
+) {
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        .withZone(ZoneId.systemDefault())
+
     val stats = listOf(
-        "Vahemaa" to "3.8 km",
-        "Kestus" to "38 min",
-        "Sammud" to "3 689",
-        "Kalorid" to "195 kcal",
-        "Keskmine kiirus" to "6.0 km/h",
-        "Algus/Lõpp aeg" to "08:27 / 09:05"
+        "Vahemaa" to "%.1f km".format(distanceKm),
+        "Kestus" to "%d min".format(durationSeconds / 60),
+        "Sammud" to steps.toString(),
+        "Kalorid" to "%d kcal".format(calories),
+        "Keskmine kiirus" to "%.1f km/h".format(averageSpeed),
+        "Algus/Lõpp aeg" to "${timeFormatter.format(Instant.ofEpochMilli(startTime))} / ${timeFormatter.format(Instant.ofEpochMilli(endTime))}"
     )
 
     Column(modifier = modifier.fillMaxWidth()) {

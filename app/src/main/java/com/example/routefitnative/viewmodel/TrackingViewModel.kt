@@ -62,6 +62,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
+    private val _lastSavedRoute = MutableStateFlow<RouteModel?>(null)
+    val lastSavedRoute: StateFlow<RouteModel?> = _lastSavedRoute.asStateFlow()
+
     private val _permissionState = MutableStateFlow(PermissionState.IDLE)
     val permissionState: StateFlow<PermissionState> = _permissionState.asStateFlow()
 
@@ -204,6 +207,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
             // 3. HANDOFF: Prepare the model for the database developer
             val userId = auth.currentUser?.uid ?: "unknown"
+            val routeId = java.util.UUID.randomUUID().toString()
             
             // Note: In real case, we might want to fetch user weight from Firestore
             // but to keep it non-blocking, we use a default or cached value
@@ -212,6 +216,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             val avgSpeed = if (finalDuration.seconds > 0) (finalDistance / 1000.0) / (finalDuration.seconds / 3600.0) else 0.0
 
             val routeToSave = RouteModel(
+                routeId = routeId,
                 userId = userId,
                 title = "Uus treening",
                 startTime = System.currentTimeMillis() - finalDuration.toMillis(),
@@ -224,11 +229,14 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                 activityType = "walking"
             )
 
+            // Store for the results screen
+            _lastSavedRoute.value = routeToSave
+
             // ==========================================================
             // TODO: DATABASE DEVELOPER (KOLMAS ISIK)
             // Kasuta: routeToSave ja finalPoints
             // ==========================================================
-            delay(800) // Simulated work
+            delay(1200) // Simulated work
             // ==========================================================
 
             _isSaving.value = false
