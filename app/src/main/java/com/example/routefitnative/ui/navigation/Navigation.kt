@@ -132,6 +132,14 @@ fun RouteFitNavigation() {
                 },
                 onEditProfileClick = {
                     navController.navigate(RouteFitRoutes.EDIT_PROFILE)
+                },
+                    onLogoutClick = {
+                        navController.navigate(RouteFitRoutes.LOGIN) {
+                            popUpTo(RouteFitRoutes.HOME) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
                 }
             )
         }

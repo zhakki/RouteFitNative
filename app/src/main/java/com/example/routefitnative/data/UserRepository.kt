@@ -13,9 +13,12 @@ class UserRepository(
     private fun userDocument(uid: String) =
         db.collection("users").document(uid)
 
+    private fun settingsDocument(uid: String) =
+        userDocument(uid).collection("settings").document("main")
+
     suspend fun createUserProfile(profile: UserProfile) {
         val userRef = userDocument(profile.uid)
-        val settingsRef = userRef.collection("settings").document("main")
+        val settingsRef = settingsDocument(profile.uid)
 
         val batch = db.batch()
 
@@ -55,6 +58,24 @@ class UserRepository(
         }
     }
 
+    suspend fun getUserSettings(uid: String): UserSettings {
+        val snapshot = settingsDocument(uid).get().await()
+
+        if (!snapshot.exists()) {
+            val defaultSettings = UserSettings()
+            updateUserSettings(uid, defaultSettings)
+            return defaultSettings
+        }
+
+        return snapshot.toUserSettings()
+    }
+
+    suspend fun updateUserSettings(uid: String, settings: UserSettings) {
+        settingsDocument(uid)
+            .set(settings.copy(updatedAt = System.currentTimeMillis()))
+            .await()
+    }
+
     private fun DocumentSnapshot.toUserProfile(): UserProfile {
         return UserProfile(
             uid = getString("uid") ?: id,
@@ -67,6 +88,16 @@ class UserRepository(
             heightCm = getDouble("heightCm") ?: 0.0,
             gender = getString("gender") ?: "",
             createdAt = getTimeMillis("createdAt"),
+            updatedAt = getTimeMillis("updatedAt")
+        )
+    }
+
+    private fun DocumentSnapshot.toUserSettings(): UserSettings {
+        return UserSettings(
+            distanceUnit = getString("distanceUnit") ?: "km",
+            saveRoutes = getBoolean("saveRoutes") ?: true,
+            allowLocation = getBoolean("allowLocation") ?: true,
+            dailyStepGoal = getLong("dailyStepGoal")?.toInt() ?: 24000,
             updatedAt = getTimeMillis("updatedAt")
         )
     }
