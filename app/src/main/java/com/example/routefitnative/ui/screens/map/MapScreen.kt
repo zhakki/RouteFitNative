@@ -257,6 +257,15 @@ private fun MapPreview(
     }
 
     var googleMap by remember { mutableStateOf<com.google.android.gms.maps.GoogleMap?>(null) }
+    var isFollowModeEnabled by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    // Detect manual movement to disable follow mode
+    LaunchedEffect(cameraPositionState.isMoving) {
+        if (cameraPositionState.isMoving && cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) {
+            isFollowModeEnabled = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -277,8 +286,8 @@ private fun MapPreview(
         }
     }
 
-    LaunchedEffect(routePoints) {
-        if (routePoints.isNotEmpty() && !isPaused && isTracking) {
+    LaunchedEffect(routePoints, isFollowModeEnabled) {
+        if (isFollowModeEnabled && routePoints.isNotEmpty() && !isPaused && isTracking) {
             cameraPositionState.animate(
                 update = CameraUpdateFactory.newLatLngZoom(routePoints.last(), DEFAULT_ZOOM)
             )
@@ -328,15 +337,42 @@ private fun MapPreview(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 24.dp, end = 24.dp)
-                .size(68.dp),
+                .size(68.dp)
+                .clip(CircleShape)
+                .clickable {
+                    isFollowModeEnabled = true
+                    scope.launch {
+                        // Try to center on the last route point first, if available
+                        val targetLatLng = if (routePoints.isNotEmpty()) {
+                            routePoints.last()
+                        } else {
+                            // Fallback to current GPS location
+                            try {
+                                fusedLocationClient.getCurrentLocation(
+                                    Priority.PRIORITY_HIGH_ACCURACY,
+                                    null
+                                ).await()?.let { LatLng(it.latitude, it.longitude) }
+                            } catch (e: Exception) { null }
+                        }
+
+                        targetLatLng?.let {
+                            cameraPositionState.animate(
+                                update = CameraUpdateFactory.newLatLngZoom(it, DEFAULT_ZOOM)
+                            )
+                        }
+                    }
+                },
             shape = CircleShape,
             color = RouteFitSurface.copy(alpha = 0.8f),
-            border = BorderStroke(2.dp, RouteFitAccent.copy(alpha = 0.76f))
+            border = BorderStroke(
+                2.dp,
+                if (isFollowModeEnabled) RouteFitAccent else RouteFitAccent.copy(alpha = 0.4f)
+            )
         ) {
             Box(contentAlignment = Alignment.Center) {
                 MyLocationIcon(
                     modifier = Modifier.size(34.dp),
-                    color = RouteFitAccent
+                    color = if (isFollowModeEnabled) RouteFitAccent else RouteFitTextSecondary
                 )
             }
         }
