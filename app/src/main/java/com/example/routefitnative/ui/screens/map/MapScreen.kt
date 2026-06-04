@@ -3,6 +3,7 @@ package com.example.routefitnative.ui.screens.map
 import android.graphics.Bitmap
 import android.annotation.SuppressLint
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -89,12 +90,20 @@ fun MapScreen(
     LaunchedEffect(permissionState) {
         when (permissionState) {
             PermissionState.NEEDS_FOREGROUND -> {
-                foregroundPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
+                val permissions = mutableListOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
                 )
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
+                }
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                
+                foregroundPermissionLauncher.launch(permissions.toTypedArray())
             }
             PermissionState.NEEDS_BACKGROUND -> {
                 backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)

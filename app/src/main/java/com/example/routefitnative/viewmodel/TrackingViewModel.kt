@@ -17,6 +17,7 @@ import com.example.routefitnative.data.RouteRepository
 import com.example.routefitnative.data.UserRepository
 import com.example.routefitnative.model.RouteModel
 import com.example.routefitnative.services.TrackingService
+import com.example.routefitnative.utils.PermissionHelper
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
@@ -117,22 +118,22 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     fun checkPermissions() {
         val context = getApplication<Application>()
-        val hasForeground = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        
+        val hasForegroundLocation = PermissionHelper.hasLocationPermissions(context)
+        val hasActivityRecognition = PermissionHelper.hasActivityRecognitionPermission(context)
+        val hasNotifications = PermissionHelper.hasNotificationPermission(context)
+        val hasBackgroundLocation = PermissionHelper.hasBackgroundLocationPermission(context)
 
         _permissionState.value = when {
-            hasForeground && hasBackground -> PermissionState.GRANTED
-            hasForeground && !hasBackground -> PermissionState.NEEDS_BACKGROUND_RATIONALE
-            else -> PermissionState.NEEDS_FOREGROUND
+            hasForegroundLocation && hasActivityRecognition && hasNotifications && hasBackgroundLocation -> {
+                PermissionState.GRANTED
+            }
+            hasForegroundLocation && hasActivityRecognition && hasNotifications && !hasBackgroundLocation -> {
+                PermissionState.NEEDS_BACKGROUND_RATIONALE
+            }
+            else -> {
+                PermissionState.NEEDS_FOREGROUND
+            }
         }
     }
 
