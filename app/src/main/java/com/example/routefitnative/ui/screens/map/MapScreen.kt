@@ -53,7 +53,7 @@ private const val DEFAULT_ZOOM = 18f
 fun MapScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
-    onStopClick: () -> Unit = {},
+    onStopClick: (String) -> Unit = {},
     trackingViewModel: TrackingViewModel = viewModel()
 ) {
     val routePoints by trackingViewModel.routePoints.collectAsState()
@@ -191,11 +191,10 @@ fun MapScreen(
                                 } catch (e: Exception) {}
 
                                 // 2. Definitive stop and save (Firebase stubbed for now)
-                                val success = trackingViewModel.finishAndSaveRoute()
-                                
-                                // 3. RE-ENABLED: Navigate on success
-                                if (success) {
-                                    onStopClick()
+                                val savedRouteId = trackingViewModel.finishAndSaveRoute()
+
+                                if (savedRouteId != null) {
+                                    onStopClick(savedRouteId)
                                 }
                             }
                         },

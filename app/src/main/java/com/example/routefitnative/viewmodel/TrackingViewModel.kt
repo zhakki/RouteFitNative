@@ -20,6 +20,7 @@ import com.example.routefitnative.model.RoutePoint
 import com.example.routefitnative.services.TrackingService
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -202,8 +203,8 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     /**
      * Prepares the data and hand over the saving process to the database developer.
      */
-    suspend fun finishAndSaveRoute(): Boolean {
-        if (_isSaving.value) return false
+    suspend fun finishAndSaveRoute(): String? {
+        if (_isSaving.value) return null
 
         val finalPoints = _routePoints.value
         val finalDistance = _totalDistance.value
@@ -212,15 +213,13 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
         stopTracking()
 
-        if (finalPoints.isEmpty()) return true
-
         return try {
             _isSaving.value = true
 
             val currentUser = auth.currentUser
             if (currentUser == null) {
                 _isSaving.value = false
-                return false
+                return null
             }
 
             val profile = try {
@@ -235,6 +234,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             val durationSeconds = finalDuration.seconds.toInt()
 
             val calories = (weightKg * distanceKm * 0.9).toInt()
+
             val averageSpeed = if (finalDuration.seconds > 0) {
                 distanceKm / (finalDuration.seconds / 3600.0)
             } else {
@@ -268,10 +268,10 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             _lastSavedRoute.value = routeToSave.copy(routeId = savedRouteId)
 
             _isSaving.value = false
-            true
+            savedRouteId
         } catch (e: Exception) {
             _isSaving.value = false
-            false
+            null
         }
     }
 
