@@ -34,6 +34,11 @@ object RouteFitRoutes {
     const val SETTINGS = "settings"
     const val RESULT = "result"
     const val ROUTE_DETAIL = "route_detail"
+    const val ROUTE_DETAIL_WITH_ID = "route_detail/{routeId}"
+
+    fun routeDetail(routeId: String): String {
+        return "$ROUTE_DETAIL/$routeId"
+    }
 }
 
 @Composable
@@ -102,8 +107,8 @@ fun RouteFitNavigation() {
                 onBottomNavItemClick = { item ->
                     navController.navigateToBottomNavItem(item)
                 },
-                onRouteClick = {
-                    navController.navigate(RouteFitRoutes.ROUTE_DETAIL)
+                onRouteClick = { routeId ->
+                    navController.navigate(RouteFitRoutes.routeDetail(routeId))
                 }
             )
         }
@@ -182,7 +187,16 @@ fun RouteFitNavigation() {
                 trackingViewModel = trackingViewModel
             )
         }
-        composable(RouteFitRoutes.ROUTE_DETAIL) {
+        composable(
+            route = RouteFitRoutes.ROUTE_DETAIL_WITH_ID,
+            arguments = listOf(
+                navArgument("routeId") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+            val routeId = backStackEntry.arguments?.getString("routeId").orEmpty()
+
             val navigateHistory = {
                 navController.navigate(RouteFitRoutes.HISTORY) {
                     launchSingleTop = true
@@ -190,6 +204,7 @@ fun RouteFitNavigation() {
             }
 
             RouteDetailScreen(
+                routeId = routeId,
                 onBackClick = navigateHistory,
                 onBackToHistoryClick = navigateHistory
             )
