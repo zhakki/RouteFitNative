@@ -2,18 +2,10 @@ package com.example.routefitnative.ui.screens.result
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,12 +15,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,70 +25,42 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.routefitnative.ui.theme.RouteFitAccent
-import com.example.routefitnative.ui.theme.RouteFitBackground
-import com.example.routefitnative.ui.theme.RouteFitOnAccent
-import com.example.routefitnative.ui.theme.RouteFitOutline
-import com.example.routefitnative.ui.theme.RouteFitSurface
-import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
-import com.example.routefitnative.ui.theme.RouteFitTextPrimary
-import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.routefitnative.ui.theme.*
+import com.example.routefitnative.viewmodel.TrackingViewModel
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
 @Composable
 fun ResultScreen(
-    routeId: String,
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
-    onBackHomeClick: () -> Unit = {}
+    onBackHomeClick: () -> Unit = {},
+    trackingViewModel: TrackingViewModel = viewModel()
 ) {
-    val auth = remember { FirebaseAuth.getInstance() }
-    val db = remember { FirebaseFirestore.getInstance() }
+    val lastRoute by trackingViewModel.lastSavedRoute.collectAsState()
+    val routeSnapshot by trackingViewModel.routeSnapshot.collectAsState()
 
-    var route by remember { mutableStateOf<ResultRouteSummary?>(null) }
-    var errorMessage by remember { mutableStateOf("") }
-
-    LaunchedEffect(routeId) {
-        val currentUser = auth.currentUser
-
-        if (currentUser == null) {
-            errorMessage = "Kasutaja pole sisse logitud."
-            return@LaunchedEffect
-        }
-
-        try {
-            if (routeId.isBlank()) {
-                errorMessage = "Marsruudi ID puudub."
-                return@LaunchedEffect
-            }
-
-            route = loadRouteById(
-                db = db,
-                uid = currentUser.uid,
-                routeId = routeId
-            )
-            errorMessage = ""
-
-            if (route == null) {
-                errorMessage = "Viimast marsruuti ei leitud."
-            }
-        } catch (e: Exception) {
-            errorMessage = e.message ?: "Marsruudi laadimine ebaõnnestus."
-        }
-    }
+    // Formatters
+    val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy • HH:mm")
+        .withZone(ZoneId.systemDefault())
 
     Box(
         modifier = modifier
@@ -142,7 +101,7 @@ fun ResultScreen(
             )
 
             Text(
-                text = "Treening lõpetatud",
+                text = lastRoute?.title ?: "Treening lõpetatud",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
@@ -156,7 +115,7 @@ fun ResultScreen(
             )
 
             Text(
-                text = route?.let { formatFullDate(it.endTime) } ?: "Andmeid laaditakse...",
+                text = lastRoute?.let { dateFormatter.format(Instant.ofEpochMilli(it.endTime)) } ?: "--.--.---- • --:--",
                 modifier = Modifier.padding(top = 8.dp),
                 color = RouteFitTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
@@ -164,39 +123,39 @@ fun ResultScreen(
             )
 
             QuickSummary(
-                route = route,
-                modifier = Modifier.padding(top = 24.dp)
+                modifier = Modifier.padding(top = 24.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                durationSeconds = lastRoute?.durationSeconds ?: 0,
+                steps = lastRoute?.steps ?: 0
             )
 
             RoutePreviewCard(
-                route = route,
-                modifier = Modifier.padding(top = 18.dp)
+                modifier = Modifier.padding(top = 18.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                snapshot = routeSnapshot
             )
 
             StatsGrid(
-                route = route,
-                modifier = Modifier.padding(top = 18.dp)
+                modifier = Modifier.padding(top = 18.dp),
+                distanceKm = lastRoute?.distanceKm ?: 0.0,
+                durationSeconds = lastRoute?.durationSeconds ?: 0,
+                steps = lastRoute?.steps ?: 0,
+                calories = lastRoute?.calories ?: 0,
+                averageSpeed = lastRoute?.averageSpeed ?: 0.0,
+                startTime = lastRoute?.startTime ?: 0L,
+                endTime = lastRoute?.endTime ?: 0L
             )
 
             SavedInfoCard(
-                routeFound = route != null,
+                routeFound = lastRoute != null,
                 modifier = Modifier.padding(top = 18.dp)
             )
 
-            if (errorMessage.isNotBlank()) {
-                Text(
-                    text = errorMessage,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    color = RouteFitAccent,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center
-                )
-            }
-
             Button(
-                onClick = onBackHomeClick,
+                onClick = {
+                    trackingViewModel.clearSnapshot()
+                    onBackHomeClick()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
@@ -258,8 +217,10 @@ private fun ResultTopBar(onBackClick: () -> Unit) {
 
 @Composable
 private fun QuickSummary(
-    route: ResultRouteSummary?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    distanceKm: Double,
+    durationSeconds: Int,
+    steps: Int
 ) {
     RouteFitResultCard(
         modifier = modifier,
@@ -269,21 +230,9 @@ private fun QuickSummary(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            SummaryItem(
-                label = "Vahemaa",
-                value = formatDistance(route?.distanceKm ?: 0.0),
-                modifier = Modifier.weight(1f)
-            )
-            SummaryItem(
-                label = "Kestus",
-                value = formatDuration(route?.durationSeconds ?: 0),
-                modifier = Modifier.weight(1f)
-            )
-            SummaryItem(
-                label = "Sammud",
-                value = formatSteps(route?.steps ?: 0),
-                modifier = Modifier.weight(1f)
-            )
+            SummaryItem(label = "Vahemaa", value = "%.1f km".format(distanceKm), modifier = Modifier.weight(1f))
+            SummaryItem(label = "Kestus", value = formatDuration(durationSeconds), modifier = Modifier.weight(1f))
+            SummaryItem(label = "Sammud", value = formatSteps(steps), modifier = Modifier.weight(1f))
         }
     }
 }
@@ -314,8 +263,9 @@ private fun SummaryItem(label: String, value: String, modifier: Modifier = Modif
 
 @Composable
 private fun RoutePreviewCard(
-    route: ResultRouteSummary?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    distanceKm: Double,
+    snapshot: android.graphics.Bitmap? = null
 ) {
     RouteFitResultCard(modifier = modifier) {
         Text(
@@ -334,8 +284,17 @@ private fun RoutePreviewCard(
                 .background(RouteFitSurfaceVariant)
                 .border(BorderStroke(1.dp, RouteFitOutline), RoundedCornerShape(22.dp))
         ) {
-            ResultMapBackground(modifier = Modifier.matchParentSize())
-            RoutePathPreview(modifier = Modifier.matchParentSize())
+            if (snapshot != null) {
+                Image(
+                    bitmap = snapshot.asImageBitmap(),
+                    contentDescription = "Raja eelvaade",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                ResultMapBackground(modifier = Modifier.matchParentSize())
+                RoutePathPreview(modifier = Modifier.matchParentSize())
+            }
 
             Surface(
                 modifier = Modifier
@@ -346,7 +305,7 @@ private fun RoutePreviewCard(
                 border = BorderStroke(1.dp, RouteFitOutline)
             ) {
                 Text(
-                    text = formatDistance(route?.distanceKm ?: 0.0),
+                    text = "%.1f km".format(distanceKm),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     color = RouteFitAccent,
                     style = MaterialTheme.typography.bodySmall,
@@ -359,19 +318,25 @@ private fun RoutePreviewCard(
 
 @Composable
 private fun StatsGrid(
-    route: ResultRouteSummary?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    distanceKm: Double,
+    durationSeconds: Int,
+    steps: Int,
+    calories: Int,
+    averageSpeed: Double,
+    startTime: Long,
+    endTime: Long
 ) {
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        .withZone(ZoneId.systemDefault())
+
     val stats = listOf(
-        "Vahemaa" to formatDistance(route?.distanceKm ?: 0.0),
-        "Kestus" to formatDuration(route?.durationSeconds ?: 0),
-        "Sammud" to formatSteps(route?.steps ?: 0),
-        "Kalorid" to "${formatSteps(route?.calories ?: 0)} kcal",
-        "Keskmine kiirus" to formatSpeed(route?.averageSpeed ?: 0.0),
-        "Algus/Lõpp aeg" to formatTimeRange(
-            route?.startTime ?: 0L,
-            route?.endTime ?: 0L
-        )
+        "Vahemaa" to "%.1f km".format(distanceKm),
+        "Kestus" to formatDuration(durationSeconds),
+        "Sammud" to formatSteps(steps),
+        "Kalorid" to "%d kcal".format(calories),
+        "Keskmine kiirus" to "%.1f km/h".format(averageSpeed),
+        "Algus/Lõpp aeg" to "${timeFormatter.format(Instant.ofEpochMilli(startTime))} / ${timeFormatter.format(Instant.ofEpochMilli(endTime))}"
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -631,107 +596,8 @@ private fun CheckIcon(modifier: Modifier = Modifier, color: Color) {
     }
 }
 
-private data class ResultRouteSummary(
-    val title: String,
-    val startTime: Long,
-    val endTime: Long,
-    val distanceKm: Double,
-    val durationSeconds: Int,
-    val steps: Int,
-    val calories: Int,
-    val averageSpeed: Double
-)
-
-private suspend fun loadRouteById(
-    db: FirebaseFirestore,
-    uid: String,
-    routeId: String
-): ResultRouteSummary? {
-    val document = db.collection("users")
-        .document(uid)
-        .collection("routes")
-        .document(routeId)
-        .get()
-        .await()
-
-    if (!document.exists()) {
-        return null
-    }
-
-    return document.toResultRouteSummary()
-}
-
-private fun DocumentSnapshot.toResultRouteSummary(): ResultRouteSummary {
-    return ResultRouteSummary(
-        title = getString("title") ?: "Marsruut",
-        startTime = getTimeMillis("startTime")
-            ?: getTimeMillis("createdAt")
-            ?: System.currentTimeMillis(),
-        endTime = getTimeMillis("endTime")
-            ?: getTimeMillis("createdAt")
-            ?: System.currentTimeMillis(),
-        distanceKm = getNumberDouble("distanceKm"),
-        durationSeconds = getNumberInt("durationSeconds"),
-        steps = getNumberInt("steps"),
-        calories = getNumberInt("calories"),
-        averageSpeed = getNumberDouble("averageSpeed")
-    )
-}
-
-private fun DocumentSnapshot.getNumberInt(fieldName: String): Int {
-    val value = get(fieldName)
-
-    return when (value) {
-        is Number -> value.toInt()
-        else -> 0
-    }
-}
-
-private fun DocumentSnapshot.getNumberDouble(fieldName: String): Double {
-    val value = get(fieldName)
-
-    return when (value) {
-        is Number -> value.toDouble()
-        else -> 0.0
-    }
-}
-
-private fun DocumentSnapshot.getTimeMillis(fieldName: String): Long? {
-    val value = get(fieldName)
-
-    return when (value) {
-        is Timestamp -> value.toDate().time
-        is Long -> value
-        is Int -> value.toLong()
-        is Double -> value.toLong()
-        else -> null
-    }
-}
-
-private fun formatFullDate(timeMillis: Long): String {
-    return SimpleDateFormat("dd.MM.yyyy • HH:mm", Locale.US).format(Date(timeMillis))
-}
-
-private fun formatTimeRange(startTime: Long, endTime: Long): String {
-    if (startTime <= 0L || endTime <= 0L) {
-        return "—"
-    }
-
-    val formatter = SimpleDateFormat("HH:mm", Locale.US)
-
-    return "${formatter.format(Date(startTime))} / ${formatter.format(Date(endTime))}"
-}
-
 private fun formatSteps(value: Int): String {
     return String.format(Locale.US, "%,d", value).replace(",", " ")
-}
-
-private fun formatDistance(distanceKm: Double): String {
-    return "${formatOneDecimal(distanceKm)} km"
-}
-
-private fun formatOneDecimal(value: Double): String {
-    return String.format(Locale.US, "%.1f", value)
 }
 
 private fun formatDuration(durationSeconds: Int): String {
@@ -746,8 +612,4 @@ private fun formatDuration(durationSeconds: Int): String {
             "${hours}h ${minutes}min"
         }
     }
-}
-
-private fun formatSpeed(speedKmh: Double): String {
-    return "${formatOneDecimal(speedKmh)} km/h"
 }

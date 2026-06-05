@@ -3,6 +3,7 @@ package com.example.routefitnative.ui.screens.map
 import android.graphics.Bitmap
 import android.annotation.SuppressLint
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -53,10 +54,11 @@ private const val DEFAULT_ZOOM = 18f
 fun MapScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
-    onStopClick: (String) -> Unit = {},
+    onStopClick: () -> Unit = {},
     trackingViewModel: TrackingViewModel = viewModel()
 ) {
     val routePoints by trackingViewModel.routePoints.collectAsState()
+    val currentLocation by trackingViewModel.currentLocation.collectAsState()
     val isTracking by trackingViewModel.isTracking.collectAsState()
     val isPaused by trackingViewModel.isPaused.collectAsState()
     val duration by trackingViewModel.duration.collectAsState()
@@ -88,12 +90,20 @@ fun MapScreen(
     LaunchedEffect(permissionState) {
         when (permissionState) {
             PermissionState.NEEDS_FOREGROUND -> {
-                foregroundPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
+                val permissions = mutableListOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
                 )
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
+                }
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                
+                foregroundPermissionLauncher.launch(permissions.toTypedArray())
             }
             PermissionState.NEEDS_BACKGROUND -> {
                 backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -157,6 +167,7 @@ fun MapScreen(
                 Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 18.dp)) {
                     MapPreview(
                         routePoints = routePoints,
+                        currentLocation = currentLocation,
                         isTracking = isTracking,
                         isPaused = isPaused,
                         onStartClick = { 
@@ -191,10 +202,11 @@ fun MapScreen(
                                 } catch (e: Exception) {}
 
                                 // 2. Definitive stop and save (Firebase stubbed for now)
-                                val savedRouteId = trackingViewModel.finishAndSaveRoute()
-
-                                if (savedRouteId != null) {
-                                    onStopClick(savedRouteId)
+                                val success = trackingViewModel.finishAndSaveRoute()
+                                
+                                // 3. RE-ENABLED: Navigate on success
+                                if (success != null) {
+                                    onStopClick()
                                 }
                             }
                         },
@@ -331,6 +343,7 @@ private fun MapStatCard(
 @Composable
 private fun MapPreview(
     routePoints: List<LatLng>,
+    currentLocation: android.location.Location?,
     isTracking: Boolean,
     isPaused: Boolean,
     onStartClick: () -> Unit,
@@ -356,33 +369,18 @@ private fun MapPreview(
         }
     }
 
-    @SuppressLint("MissingPermission")
-    LaunchedEffect(Unit) {
-        try {
-            if (permissionState == PermissionState.GRANTED) {
-                val location = fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    null
-                ).await()
-                
-                if (location != null) {
-                    cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                        LatLng(location.latitude, location.longitude), 
+    // Tsentreerime kohe, kui esimene asukoht saabub või muutub ja follow on sees
+    LaunchedEffect(currentLocation, isFollowModeEnabled) {
+        if (isFollowModeEnabled) {
+            currentLocation?.let { loc ->
+                cameraPositionState.animate(
+                    update = CameraUpdateFactory.newLatLngZoom(
+                        LatLng(loc.latitude, loc.longitude), 
                         DEFAULT_ZOOM
                     )
-                }
+                )
+                onLocationLoaded() // Peidame loading indikaatori
             }
-        } catch (e: SecurityException) {
-        } finally {
-            onLocationLoaded()
-        }
-    }
-
-    LaunchedEffect(routePoints, isFollowModeEnabled) {
-        if (isFollowModeEnabled && routePoints.isNotEmpty() && !isPaused && isTracking) {
-            cameraPositionState.animate(
-                update = CameraUpdateFactory.newLatLngZoom(routePoints.last(), DEFAULT_ZOOM)
-            )
         }
     }
 
@@ -436,26 +434,12 @@ private fun MapPreview(
                 .clickable {
                     isFollowModeEnabled = true
                     scope.launch {
-                        // Try to center on the last route point first, if available
-                        val targetLatLng = if (routePoints.isNotEmpty()) {
-                            routePoints.last()
-                        } else {
-                            // Fallback to current GPS location
-                            try {
-                                if (permissionState == PermissionState.GRANTED) {
-                                    @SuppressLint("MissingPermission")
-                                    val loc = fusedLocationClient.getCurrentLocation(
-                                        Priority.PRIORITY_HIGH_ACCURACY,
-                                        null
-                                    ).await()
-                                    loc?.let { LatLng(it.latitude, it.longitude) }
-                                } else null
-                            } catch (e: Exception) { null }
-                        }
-
-                        targetLatLng?.let {
+                        currentLocation?.let { loc ->
                             cameraPositionState.animate(
-                                update = CameraUpdateFactory.newLatLngZoom(it, DEFAULT_ZOOM)
+                                update = CameraUpdateFactory.newLatLngZoom(
+                                    LatLng(loc.latitude, loc.longitude), 
+                                    DEFAULT_ZOOM
+                                )
                             )
                         }
                     }

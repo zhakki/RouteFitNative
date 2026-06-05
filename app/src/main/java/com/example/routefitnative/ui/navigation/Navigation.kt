@@ -5,6 +5,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.routefitnative.viewmodel.TrackingViewModel
 import com.example.routefitnative.ui.components.BottomNavItem
 import com.example.routefitnative.ui.screens.history.HistoryScreen
 import com.example.routefitnative.ui.screens.home.HomeScreen
@@ -31,17 +33,14 @@ object RouteFitRoutes {
     const val EDIT_PROFILE = "edit_profile"
     const val SETTINGS = "settings"
     const val RESULT = "result"
-    const val RESULT_WITH_ID = "result/{routeId}"
-
-    fun result(routeId: String): String {
-        return "$RESULT/$routeId"
-    }
     const val ROUTE_DETAIL = "route_detail"
 }
 
 @Composable
 fun RouteFitNavigation() {
     val navController = rememberNavController()
+    // Shared ViewModel for tracking and results
+    val trackingViewModel: TrackingViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -92,9 +91,10 @@ fun RouteFitNavigation() {
                 onBottomNavItemClick = { item ->
                     navController.navigateToBottomNavItem(item)
                 },
-                onStopClick = { routeId ->
-                    navController.navigate(RouteFitRoutes.result(routeId))
-                }
+                onStopClick = {
+                    navController.navigate(RouteFitRoutes.RESULT)
+                },
+                trackingViewModel = trackingViewModel
             )
         }
         composable(RouteFitRoutes.HISTORY) {
@@ -140,13 +140,13 @@ fun RouteFitNavigation() {
                 onEditProfileClick = {
                     navController.navigate(RouteFitRoutes.EDIT_PROFILE)
                 },
-                    onLogoutClick = {
-                        navController.navigate(RouteFitRoutes.LOGIN) {
-                            popUpTo(RouteFitRoutes.HOME) {
-                                inclusive = true
-                            }
-                            launchSingleTop = true
+                onLogoutClick = {
+                    navController.navigate(RouteFitRoutes.LOGIN) {
+                        popUpTo(RouteFitRoutes.HOME) {
+                            inclusive = true
                         }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -166,16 +166,7 @@ fun RouteFitNavigation() {
                 onCancelClick = navigateProfile
             )
         }
-        composable(
-            route = RouteFitRoutes.RESULT_WITH_ID,
-            arguments = listOf(
-                navArgument("routeId") {
-                    type = NavType.StringType
-                }
-            )
-        ) { backStackEntry ->
-            val routeId = backStackEntry.arguments?.getString("routeId").orEmpty()
-
+        composable(RouteFitRoutes.RESULT) {
             val navigateHome = {
                 navController.navigate(RouteFitRoutes.HOME) {
                     popUpTo(RouteFitRoutes.HOME) {
@@ -186,9 +177,9 @@ fun RouteFitNavigation() {
             }
 
             ResultScreen(
-                routeId = routeId,
                 onBackClick = navigateHome,
-                onBackHomeClick = navigateHome
+                onBackHomeClick = navigateHome,
+                trackingViewModel = trackingViewModel
             )
         }
         composable(RouteFitRoutes.ROUTE_DETAIL) {

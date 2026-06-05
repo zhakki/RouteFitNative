@@ -16,32 +16,46 @@ class StepSensor(context: Context) : SensorEventListener {
     private val _steps = MutableStateFlow(0)
     val steps: StateFlow<Int> = _steps
 
-    private var startSteps: Int? = null
     private var isCounting = false
     private var isPaused = false
-    private var stepsAtPause = 0
-    private var totalPausedSteps = 0
+    
+    private var totalStepsBeforeCurrentSegment = 0
+    private var sensorValueAtSegmentStart: Int? = null
+    private var lastSensorValue: Int? = null
 
     fun startCounting() {
         if (isCounting || stepCounterSensor == null) return
 
-        startSteps = null
         isCounting = true
         isPaused = false
-        stepsAtPause = 0
-        totalPausedSteps = 0
+        totalStepsBeforeCurrentSegment = 0
+        sensorValueAtSegmentStart = null
+        lastSensorValue = null
+        _steps.value = 0
+        
         sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI)
     }
 
     fun pauseCounting() {
         if (!isCounting || isPaused) return
+        
+        // Salvestame hetkeni kogutud sammud püsivaks
+        lastSensorValue?.let { current ->
+            sensorValueAtSegmentStart?.let { start ->
+                totalStepsBeforeCurrentSegment += (current - start)
+            }
+        }
+        
         isPaused = true
-        stepsAtPause = _steps.value
+        sensorValueAtSegmentStart = null // Märgime, et aktiivset segmenti pole
     }
 
     fun resumeCounting() {
         if (!isCounting || !isPaused) return
+        
         isPaused = false
+        // Uus segment algab järgmise sensorisündmusega
+        sensorValueAtSegmentStart = null 
     }
 
     fun stopCounting(): Int {
@@ -49,26 +63,26 @@ class StepSensor(context: Context) : SensorEventListener {
         sensorManager.unregisterListener(this)
         isCounting = false
         isPaused = false
-        startSteps = null
-        _steps.value = 0
+        sensorValueAtSegmentStart = null
+        lastSensorValue = null
         return finalSteps
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_STEP_COUNTER) {
             val currentSensorValue = event.values[0].toInt()
+            lastSensorValue = currentSensorValue
             
-            if (startSteps == null) {
-                startSteps = currentSensorValue
+            if (isPaused) return
+
+            // Kui segment on just alanud (start või resume), fikseerime algpunkti
+            if (sensorValueAtSegmentStart == null) {
+                sensorValueAtSegmentStart = currentSensorValue
             }
 
-            if (!isPaused) {
-                _steps.value = currentSensorValue - (startSteps ?: currentSensorValue) - totalPausedSteps
-            } else {
-                val currentStepsTotal = currentSensorValue - (startSteps ?: currentSensorValue) - totalPausedSteps
-                totalPausedSteps += (currentStepsTotal - stepsAtPause)
-                stepsAtPause = currentStepsTotal
-            }
+            // Arvutame: varem kogutud + selle segmendi sammud
+            val stepsInCurrentSegment = currentSensorValue - (sensorValueAtSegmentStart ?: currentSensorValue)
+            _steps.value = totalStepsBeforeCurrentSegment + stepsInCurrentSegment
         }
     }
 

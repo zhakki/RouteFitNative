@@ -18,9 +18,9 @@ import com.example.routefitnative.data.UserRepository
 import com.example.routefitnative.model.RouteModel
 import com.example.routefitnative.model.RoutePoint
 import com.example.routefitnative.services.TrackingService
+import com.example.routefitnative.utils.PermissionHelper
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
-
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +47,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private val _routePoints = MutableStateFlow<List<LatLng>>(emptyList())
     val routePoints: StateFlow<List<LatLng>> = _routePoints.asStateFlow()
+
+    private val _currentLocation = MutableStateFlow<android.location.Location?>(null)
+    val currentLocation: StateFlow<android.location.Location?> = _currentLocation.asStateFlow()
 
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
@@ -85,6 +88,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                 trackingService?.routePoints?.collect { _routePoints.value = it }
             }
             viewModelScope.launch {
+                trackingService?.currentLocation?.collect { _currentLocation.value = it }
+            }
+            viewModelScope.launch {
                 trackingService?.isTracking?.collect { _isTracking.value = it }
             }
             viewModelScope.launch {
@@ -114,22 +120,22 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     fun checkPermissions() {
         val context = getApplication<Application>()
-        val hasForeground = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        
+        val hasForegroundLocation = PermissionHelper.hasLocationPermissions(context)
+        val hasActivityRecognition = PermissionHelper.hasActivityRecognitionPermission(context)
+        val hasNotifications = PermissionHelper.hasNotificationPermission(context)
+        val hasBackgroundLocation = PermissionHelper.hasBackgroundLocationPermission(context)
 
         _permissionState.value = when {
-            hasForeground && hasBackground -> PermissionState.GRANTED
-            hasForeground && !hasBackground -> PermissionState.NEEDS_BACKGROUND_RATIONALE
-            else -> PermissionState.NEEDS_FOREGROUND
+            hasForegroundLocation && hasActivityRecognition && hasNotifications && hasBackgroundLocation -> {
+                PermissionState.GRANTED
+            }
+            hasForegroundLocation && hasActivityRecognition && hasNotifications && !hasBackgroundLocation -> {
+                PermissionState.NEEDS_BACKGROUND_RATIONALE
+            }
+            else -> {
+                PermissionState.NEEDS_FOREGROUND
+            }
         }
     }
 
@@ -173,15 +179,21 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             action = "START"
         }
         ContextCompat.startForegroundService(getApplication(), intent)
-        trackingService?.startTracking()
+        viewModelScope.launch {
+            trackingService?.startTracking()
+        }
     }
 
     fun pauseTracking() {
-        trackingService?.pauseTracking()
+        viewModelScope.launch {
+            trackingService?.pauseTracking()
+        }
     }
 
     fun resumeTracking() {
-        trackingService?.resumeTracking()
+        viewModelScope.launch {
+            trackingService?.resumeTracking()
+        }
     }
 
     fun stopTracking() {
@@ -190,7 +202,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             action = "STOP"
         }
         getApplication<Application>().startService(intent)
-        trackingService?.stopTracking()
+        viewModelScope.launch {
+            trackingService?.stopTracking()
+        }
 
         _isTracking.value = false
         _isPaused.value = false
@@ -212,6 +226,8 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         val finalSteps = _steps.value
 
         stopTracking()
+
+        if (finalPoints.isEmpty()) return null
 
         return try {
             _isSaving.value = true
@@ -265,7 +281,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                 route = routeToSave
             )
 
-            _lastSavedRoute.value = routeToSave.copy(routeId = savedRouteId)
+            _lastSavedRoute.value = routeToSave.copy(routeId = savedRouteId ?: "")
 
             _isSaving.value = false
             savedRouteId
