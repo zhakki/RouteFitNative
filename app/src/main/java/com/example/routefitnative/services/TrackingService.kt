@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 class TrackingService : Service() {
 
@@ -39,6 +41,9 @@ class TrackingService : Service() {
 
     private val _routePoints = MutableStateFlow<List<LatLng>>(emptyList())
     val routePoints: StateFlow<List<LatLng>> = _routePoints
+
+    private val _currentLocation = MutableStateFlow<Location?>(null)
+    val currentLocation: StateFlow<Location?> = _currentLocation
 
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking
@@ -70,9 +75,11 @@ class TrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.action?.let { action ->
-            when (action) {
-                "START" -> startTracking()
-                "STOP" -> stopTracking()
+            serviceScope.launch {
+                when (action) {
+                    "START" -> startTracking()
+                    "STOP" -> stopTracking()
+                }
             }
         }
         return START_NOT_STICKY
@@ -84,22 +91,56 @@ class TrackingService : Service() {
         stepSensor = StepSensor(this)
         createNotificationChannel()
 
+        // Üks püsiv korutiin sammude kogumiseks kogu teenuse eluea vältel
+        serviceScope.launch {
+            stepSensor.steps.collect { currentSteps ->
+                if (_isTracking.value) {
+                    _steps.value = currentSteps
+                }
+            }
+        }
+
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                if (_isTracking.value && !_isPaused.value) {
-                    locationResult.lastLocation?.let { location ->
+                locationResult.lastLocation?.let { location ->
+                    _currentLocation.value = location
+                    if (_isTracking.value && !_isPaused.value) {
                         addPoint(location)
                     }
                 }
             }
         }
+        
+        // Start updates immediately for UI centering
+        requestLocationUpdates()
     }
 
-    private fun addPoint(location: Location) {
+    private suspend fun captureCurrentLocation(timeoutMs: Long? = null): Location? {
+        return try {
+            val task = fusedLocationClient.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                null
+            )
+            if (timeoutMs != null) {
+                withTimeoutOrNull(timeoutMs) {
+                    task.await()
+                }
+            } else {
+                task.await()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun addPoint(location: Location, calculateDistance: Boolean = true) {
         val newPoint = LatLng(location.latitude, location.longitude)
         val currentList = _routePoints.value.toMutableList()
         
-        if (currentList.isNotEmpty()) {
+        // Vältime duplikaatpunkte järjest
+        if (currentList.isNotEmpty() && currentList.last() == newPoint) return
+
+        if (calculateDistance && currentList.isNotEmpty()) {
             _totalDistance.value += MapUtils.calculateDistance(currentList.last(), newPoint)
         }
 
@@ -107,14 +148,28 @@ class TrackingService : Service() {
         _routePoints.value = currentList
     }
 
-    fun startTracking() {
+    suspend fun startTracking() {
         if (_isTracking.value) return
+        _isTracking.value = true // Märgime kohe aktiivseks
+
+        // 1. Käivitame sammude lugemise kohe
+        stepSensor.startCounting()
+
+        // 2. Alustame foreground teenust
+        startForeground(NOTIFICATION_ID, createNotification("Otsitakse GPS signaali..."))
 
         _routePoints.value = emptyList()
         _totalDistance.value = 0.0
         _steps.value = 0
         _duration.value = java.time.Duration.ZERO
-        _isTracking.value = true
+
+        // 3. Ootame kriitilist esimest punkti
+        val location = captureCurrentLocation()
+        location?.let { 
+            _currentLocation.value = it
+            addPoint(it, calculateDistance = false) 
+        }
+
         _isPaused.value = false
 
         timerJob?.cancel()
@@ -127,37 +182,51 @@ class TrackingService : Service() {
             }
         }
 
-        serviceScope.launch {
-            stepSensor.steps.collect {
-                _steps.value = it
-            }
-        }
-        stepSensor.startCounting()
-
-        startForeground(NOTIFICATION_ID, createNotification("RouteFit is tracking..."))
+        updateNotification("RouteFit jälgib teekonda")
         requestLocationUpdates()
     }
 
-    fun pauseTracking() {
+    suspend fun pauseTracking() {
         if (!_isTracking.value || _isPaused.value) return
+        
+        // Peatame sammud ja märgime pausi kohe
         _isPaused.value = true
         stepSensor.pauseCounting()
-        updateNotification("Tracking paused")
+        
+        // Üritame saada täpse punkti pausi hetkel
+        val location = captureCurrentLocation(2000L)
+        location?.let { addPoint(it, calculateDistance = true) }
+
+        updateNotification("Jälgimine peatatud")
     }
 
-    fun resumeTracking() {
+    suspend fun resumeTracking() {
         if (!_isTracking.value || !_isPaused.value) return
+        
+        // Jätkame sammude lugemist ja märgime pausi lõppenuks kohe
         _isPaused.value = false
         stepSensor.resumeCounting()
-        updateNotification("RouteFit is tracking...")
+        
+        // Ootame jätkamise punkti
+        val location = captureCurrentLocation()
+        location?.let { addPoint(it, calculateDistance = false) }
+
+        updateNotification("RouteFit jälgib teekonda")
     }
 
-    fun stopTracking() {
+    suspend fun stopTracking() {
+        if (!_isTracking.value) return
+
+        // Lisame lõpp-punkti (2s timeout)
+        val location = captureCurrentLocation(2000L)
+        location?.let { addPoint(it, calculateDistance = true) }
+
+        performFinalStop()
+    }
+
+    private fun performFinalStop() {
         _isTracking.value = false
         _isPaused.value = false
-        _routePoints.value = emptyList()
-        _totalDistance.value = 0.0
-        _duration.value = java.time.Duration.ZERO
         
         timerJob?.cancel()
         timerJob = null
