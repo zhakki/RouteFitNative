@@ -86,32 +86,39 @@ fun StatisticsScreen(
             val summaries = loadStatisticDailySummaries(db, currentUser.uid)
 
             val weekDates = currentWeekDates()
-            val routeStepsByDate = routes
-                .groupBy { it.date }
-                .mapValues { entry -> entry.value.sumOf { it.steps } }
+            val weekRoutes = routes.filter { route ->
+                route.date in weekDates
+            }
+
+            val routesByDate = weekRoutes.groupBy { it.date }
 
             val dailySteps = weekDates.map { date ->
-                summaries[date]?.totalSteps
-                    ?: routeStepsByDate[date]
-                    ?: 0
+                val summarySteps = summaries[date]?.totalSteps ?: 0
+                val routeSteps = routesByDate[date]?.sumOf { it.steps } ?: 0
+
+                maxOf(summarySteps, routeSteps)
             }
 
             val dailyCalories = weekDates.map { date ->
-                summaries[date]?.calories
-                    ?: routes.filter { it.date == date }.sumOf { it.calories }
+                val summaryCalories = summaries[date]?.calories ?: 0
+                val routeCalories = routesByDate[date]?.sumOf { it.calories } ?: 0
+
+                maxOf(summaryCalories, routeCalories)
             }
 
             val dailyDistanceKm = weekDates.map { date ->
-                summaries[date]?.distanceKm
-                    ?: routes.filter { it.date == date }.sumOf { it.distanceKm }
+                val summaryDistance = summaries[date]?.distanceKm ?: 0.0
+                val routeDistance = routesByDate[date]?.sumOf { it.distanceKm } ?: 0.0
+
+                maxOf(summaryDistance, routeDistance)
             }
 
             val weekSteps = dailySteps.sum()
             val weekCalories = dailyCalories.sum()
             val weekDistanceKm = dailyDistanceKm.sum()
 
-            val daysWithData = dailySteps.count { it > 0 }.coerceAtLeast(1)
-            val averageSteps = weekSteps / daysWithData
+            val daysPassedThisWeek = (todayWeekIndex() + 1).coerceIn(1, 7)
+            val averageSteps = weekSteps / daysPassedThisWeek
 
             val completedDays = dailySteps.count { it >= settings.dailyStepGoal }
 
@@ -129,7 +136,7 @@ fun StatisticsScreen(
                 weekSteps = weekSteps,
                 dailySteps = dailySteps,
                 recentRoutes = recentRoutes,
-                routeCount = routes.size,
+                routeCount = weekRoutes.size,
                 errorMessage = ""
             )
         } catch (e: Exception) {
