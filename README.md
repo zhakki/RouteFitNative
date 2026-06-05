@@ -216,10 +216,13 @@ app/google-services.json
 
 * Firebase Authentication
 * Firestore integratsioon
-* profiili, seadete, ajaloo ja tulemuste andmete haldamine
-* README dokumentatsiooni koostamin
+* Kasutajaandmete, seadete, marsruutide, tulemuste ja statistika andmete haldamine
+* Andmebaasi ühendamine Jetpack Compose kasutajaliidesega
 * Funktsionaalsuse testimine ja vigade kontrollimine
-* Integratsiooni testimine pärast merge'e
+* Andmete salvestamise, laadimise, uuendamise ja vormindamise loogika arendamine
+* Reaalsete andmete kuvamine olemasolevas UI/UX disainis ilma visuaalset stiili muutmata
+* Laadimisolekute, veateadete ja tühjade andmete kuvamise lahendamine
+
 
 ---
 
