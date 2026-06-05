@@ -214,14 +214,15 @@ app/google-services.json
 
 ### Ilona Žakovitš
 
-* Firebase Authentication
-* Firestore integratsioon
-* Kasutajaandmete, seadete, marsruutide, tulemuste ja statistika andmete haldamine
-* Andmebaasi ühendamine Jetpack Compose kasutajaliidesega
-* Funktsionaalsuse testimine ja vigade kontrollimine
-* Andmete salvestamise, laadimise, uuendamise ja vormindamise loogika arendamine
-* Reaalsete andmete kuvamine olemasolevas UI/UX disainis ilma visuaalset stiili muutmata
-* Laadimisolekute, veateadete ja tühjade andmete kuvamise lahendamine
+* Projekti esmane seadistamine
+* GitHubi hoidla seadistamine
+* Projekti struktuuri ettevalmistamine meeskonnatööks
+* Firebase'i autentimise seadistamine
+* Ühenduse loomine Firestore'i andmebaasiga
+* Kasutajaprofiili andmete haldamine
+* Andmemudelite ja hoidlatasandi ettevalmistamine
+* Kasutajaliidese ja andmebaasi integreerimine
+* Andmete salvestamise ja kuvamise testimine
 
 
 ---
