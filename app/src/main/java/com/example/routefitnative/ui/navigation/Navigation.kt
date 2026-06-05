@@ -33,11 +33,6 @@ object RouteFitRoutes {
     const val EDIT_PROFILE = "edit_profile"
     const val SETTINGS = "settings"
     const val RESULT = "result"
-    const val RESULT_WITH_ID = "result/{routeId}"
-
-    fun result(routeId: String): String {
-        return "$RESULT/$routeId"
-    }
     const val ROUTE_DETAIL = "route_detail"
 }
 
@@ -96,16 +91,10 @@ fun RouteFitNavigation() {
                 onBottomNavItemClick = { item ->
                     navController.navigateToBottomNavItem(item)
                 },
-<<<<<<< HEAD
-                onStopClick = { routeId ->
-                    navController.navigate(RouteFitRoutes.result(routeId))
-                }
-=======
                 onStopClick = {
                     navController.navigate(RouteFitRoutes.RESULT)
                 },
                 trackingViewModel = trackingViewModel
->>>>>>> origin/merge/all
             )
         }
         composable(RouteFitRoutes.HISTORY) {
@@ -151,13 +140,13 @@ fun RouteFitNavigation() {
                 onEditProfileClick = {
                     navController.navigate(RouteFitRoutes.EDIT_PROFILE)
                 },
-                    onLogoutClick = {
-                        navController.navigate(RouteFitRoutes.LOGIN) {
-                            popUpTo(RouteFitRoutes.HOME) {
-                                inclusive = true
-                            }
-                            launchSingleTop = true
+                onLogoutClick = {
+                    navController.navigate(RouteFitRoutes.LOGIN) {
+                        popUpTo(RouteFitRoutes.HOME) {
+                            inclusive = true
                         }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -177,16 +166,7 @@ fun RouteFitNavigation() {
                 onCancelClick = navigateProfile
             )
         }
-        composable(
-            route = RouteFitRoutes.RESULT_WITH_ID,
-            arguments = listOf(
-                navArgument("routeId") {
-                    type = NavType.StringType
-                }
-            )
-        ) { backStackEntry ->
-            val routeId = backStackEntry.arguments?.getString("routeId").orEmpty()
-
+        composable(RouteFitRoutes.RESULT) {
             val navigateHome = {
                 navController.navigate(RouteFitRoutes.HOME) {
                     popUpTo(RouteFitRoutes.HOME) {
@@ -197,7 +177,6 @@ fun RouteFitNavigation() {
             }
 
             ResultScreen(
-                routeId = routeId,
                 onBackClick = navigateHome,
                 onBackHomeClick = navigateHome,
                 trackingViewModel = trackingViewModel
