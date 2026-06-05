@@ -204,13 +204,16 @@ app/google-services.json
 
 ### Margus Apinis
 
-* Google Maps
-* GPS-jälgimine
-* sammude lugemine
-* marsruutide jälgimise loogika
-* Integratsiooni testimine pärast merge'e
-* Osalemine projekti arhitektuuri ja kasutajaliidese planeerimisel
-* Funktsionaalsuse testimine ja vigade kontrollimine
+* Google Mapsi integreerimine
+* Geolokatsioon
+* Jälgimine taustal / lukustatud ekraanil
+* Geolokatsiooni ja taustal jälgimise lubade haldamine
+* Marsruudi jälgimise alustamise, peatamise, jätkamise ja lõpetamise loogika
+* Marsruudi jälgimise juhtsignaalide edastamine sammude loendamiseks
+* Põhiliste marsruudiandmete kogumine ja arvutamine
+* Marsruudi joonistamine kaardile
+* Rakenduse erinevate osade integreerimine ja ühendamine
+* Funktsionaalsuse testimine ja veaparandus
 
 ### Ilona Žakovitš
 
@@ -219,9 +222,11 @@ app/google-services.json
 * Projekti struktuuri ettevalmistamine meeskonnatööks
 * Firebase'i autentimise seadistamine
 * Ühenduse loomine Firestore'i andmebaasiga
+* Kasutajate registreerimise ja sisselogimise loogika
 * Kasutajaprofiili andmete haldamine
 * Andmemudelite ja hoidlatasandi ettevalmistamine
 * Kasutajaliidese ja andmebaasi integreerimine
+* Sammude loendamise integreerimine
 * Andmete salvestamise ja kuvamise testimine
 
 
