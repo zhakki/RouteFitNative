@@ -25,6 +25,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -32,7 +37,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,13 +50,54 @@ import com.example.routefitnative.ui.theme.RouteFitSurface
 import com.example.routefitnative.ui.theme.RouteFitSurfaceVariant
 import com.example.routefitnative.ui.theme.RouteFitTextPrimary
 import com.example.routefitnative.ui.theme.RouteFitTextSecondary
+import com.example.routefitnative.data.RouteRepository
+import com.example.routefitnative.model.RouteModel
+import com.google.firebase.auth.FirebaseAuth
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun RouteDetailScreen(
+    routeId: String,
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onBackToHistoryClick: () -> Unit = {}
 ) {
+    val auth = remember { FirebaseAuth.getInstance() }
+    val routeRepository = remember { RouteRepository() }
+
+    var route by remember { mutableStateOf<RouteModel?>(null) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(routeId) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            errorMessage = "Kasutaja pole sisse logitud."
+            return@LaunchedEffect
+        }
+
+        if (routeId.isBlank()) {
+            errorMessage = "Marsruudi ID puudub."
+            return@LaunchedEffect
+        }
+
+        try {
+            route = routeRepository.getRouteById(
+                uid = currentUser.uid,
+                routeId = routeId
+            )
+
+            errorMessage = if (route == null) {
+                "Marsruuti ei leitud."
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Marsruudi laadimine ebaõnnestus."
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -99,7 +144,7 @@ fun RouteDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Uus marsruut",
+                    text = route?.title?.takeIf { it.isNotBlank() } ?: "Marsruut",
                     color = RouteFitTextPrimary,
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontSize = 36.sp,
@@ -126,7 +171,7 @@ fun RouteDetailScreen(
             }
 
             Text(
-                text = "02.06.2026 • 18:47",
+                text = route?.let { formatFullDate(getRouteDisplayTime(it)) } ?: "Andmeid laaditakse...",
                 modifier = Modifier.padding(top = 8.dp),
                 color = RouteFitTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
@@ -134,12 +179,25 @@ fun RouteDetailScreen(
             )
 
             StatsGrid(
+                route = route,
                 modifier = Modifier.padding(top = 26.dp)
             )
 
             ActivityCard(
+                route = route,
                 modifier = Modifier.padding(top = 18.dp)
             )
+            if (errorMessage.isNotBlank()) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    color = RouteFitAccent,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
 
             Button(
                 onClick = {},
@@ -223,14 +281,20 @@ private fun RouteDetailTopBar(onBackClick: () -> Unit) {
 }
 
 @Composable
-private fun StatsGrid(modifier: Modifier = Modifier) {
+private fun StatsGrid(
+    route: RouteModel?,
+    modifier: Modifier = Modifier
+) {
     val stats = listOf(
-        "Vahemaa" to "1.8 km",
-        "Kestus" to "36:49",
-        "Sammud" to "2722",
-        "Kalorid" to "94 kcal",
-        "Keskmine kiirus" to "3.0 km/h",
-        "Aeg" to "18:47 - 19:23"
+        "Vahemaa" to formatDistance(route?.distanceKm ?: 0.0),
+        "Kestus" to formatDurationClock(route?.durationSeconds ?: 0),
+        "Sammud" to formatSteps(route?.steps ?: 0),
+        "Kalorid" to "${formatSteps(route?.calories ?: 0)} kcal",
+        "Keskmine kiirus" to formatSpeed(route?.averageSpeed ?: 0.0),
+        "Aeg" to formatTimeRange(
+            route?.startTime ?: 0L,
+            route?.endTime ?: 0L
+        )
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -281,7 +345,10 @@ private fun StatTile(
 }
 
 @Composable
-private fun ActivityCard(modifier: Modifier = Modifier) {
+private fun ActivityCard(
+    route: RouteModel?,
+    modifier: Modifier = Modifier
+) {
     RouteFitDetailCard(
         modifier = modifier,
         contentPadding = 22.dp
@@ -312,7 +379,7 @@ private fun ActivityCard(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    text = "Kõndimine",
+                    text = formatActivityType(route?.activityType.orEmpty()),
                     modifier = Modifier.padding(top = 6.dp),
                     color = RouteFitTextPrimary,
                     style = MaterialTheme.typography.titleLarge,
@@ -445,5 +512,65 @@ private fun WalkingIcon(modifier: Modifier = Modifier, color: Color) {
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
+    }
+}
+private fun getRouteDisplayTime(route: RouteModel): Long {
+    return when {
+        route.endTime > 0L -> route.endTime
+        route.startTime > 0L -> route.startTime
+        route.createdAt > 0L -> route.createdAt
+        else -> System.currentTimeMillis()
+    }
+}
+
+private fun formatFullDate(timeMillis: Long): String {
+    return SimpleDateFormat("dd.MM.yyyy • HH:mm", Locale.US).format(Date(timeMillis))
+}
+
+private fun formatTimeRange(startTime: Long, endTime: Long): String {
+    if (startTime <= 0L || endTime <= 0L) {
+        return "—"
+    }
+
+    val formatter = SimpleDateFormat("HH:mm", Locale.US)
+
+    return "${formatter.format(Date(startTime))} - ${formatter.format(Date(endTime))}"
+}
+
+private fun formatSteps(value: Int): String {
+    return String.format(Locale.US, "%,d", value).replace(",", " ")
+}
+
+private fun formatDistance(distanceKm: Double): String {
+    return "${formatOneDecimal(distanceKm)} km"
+}
+
+private fun formatOneDecimal(value: Double): String {
+    return String.format(Locale.US, "%.1f", value)
+}
+
+private fun formatDurationClock(durationSeconds: Int): String {
+    val safeSeconds = durationSeconds.coerceAtLeast(0)
+    val hours = safeSeconds / 3600
+    val minutes = (safeSeconds % 3600) / 60
+    val seconds = safeSeconds % 60
+
+    return if (hours > 0) {
+        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.US, "%d:%02d", minutes, seconds)
+    }
+}
+
+private fun formatSpeed(speedKmh: Double): String {
+    return "${formatOneDecimal(speedKmh)} km/h"
+}
+
+private fun formatActivityType(activityType: String): String {
+    return when (activityType.lowercase()) {
+        "walking" -> "Kõndimine"
+        "running" -> "Jooksmine"
+        "cycling" -> "Rattasõit"
+        else -> "Kõndimine"
     }
 }

@@ -54,6 +54,23 @@ class RouteRepository(
         }
     }
 
+    suspend fun getRouteById(uid: String, routeId: String): RouteModel? {
+        val document = routesCollection(uid)
+            .document(routeId)
+            .get()
+            .await()
+
+        if (!document.exists()) {
+            return null
+        }
+
+        return document.toObject(RouteModel::class.java)
+            ?.copy(
+                routeId = document.id,
+                userId = uid
+            )
+    }
+
     suspend fun updateRouteTitle(uid: String, routeId: String, newTitle: String) {
         routesCollection(uid)
             .document(routeId)

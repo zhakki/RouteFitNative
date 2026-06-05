@@ -68,8 +68,9 @@ import java.util.Locale
 fun HistoryScreen(
     modifier: Modifier = Modifier,
     onBottomNavItemClick: (BottomNavItem) -> Unit = {},
-    onRouteClick: () -> Unit = {}
-) {
+    onRouteClick: (String) -> Unit = {}
+)
+ {
     val authRepository = remember { AuthRepository() }
     val userRepository = remember { UserRepository() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -209,7 +210,9 @@ fun HistoryScreen(
                             duration = formatDuration(route.durationSeconds),
                             steps = formatSteps(route.steps),
                             calories = "${formatSteps(route.calories)} kcal",
-                            onClick = onRouteClick,
+                            onClick = {
+                                onRouteClick(route.routeId)
+                            },
                             modifier = Modifier.padding(top = 18.dp)
                         )
                     }
@@ -516,6 +519,7 @@ private data class HistoryUiState(
 )
 
 private data class HistoryRouteSummary(
+    val routeId: String,
     val title: String,
     val timeMillis: Long,
     val distanceKm: Double,
@@ -540,6 +544,7 @@ private suspend fun loadHistoryRoutes(
             ?: System.currentTimeMillis()
 
         HistoryRouteSummary(
+            routeId = document.getString("routeId") ?: document.id,
             title = document.getString("title")
                 ?: document.getString("name")
                 ?: "Marsruut",
